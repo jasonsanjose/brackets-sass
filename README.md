@@ -1,7 +1,7 @@
 brackets-sass
 ===========================
 
-Compiles *.sass and *.scss files when changed.
+Compiles *.scss files when changed.
 
 ## Preferences
 
