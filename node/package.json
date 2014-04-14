@@ -1,0 +1,6 @@
+{
+  "name": "brackets-sass-node",
+  "devDependencies": {
+    "node-sass": "0.8.0"
+  }
+}

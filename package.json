@@ -1,0 +1,25 @@
+{
+  "name": "brackets-sass",
+  "title": "Bracket SASS",
+  "homepage": "https://github.com/jasonsanjose/brackets-sass",
+  "author": "Jason San Jose",
+  "version": "0.1.0",
+  "engines": {
+    "brackets": ">=0.37"
+  },
+  "description": "",
+  "devDependencies": {
+    "grunt": "0.4.1",
+    "grunt-cli": "0.1.9",
+    "grunt-contrib-jshint": "0.6.0",
+    "grunt-contrib-clean": "0.4.1",
+    "grunt-contrib-copy": "0.4.1",
+    "grunt-contrib-requirejs": "0.4.1",
+    "load-grunt-tasks": "0.2.0",
+    "grunt-contrib-compress": "0.7.0",
+    "jshint": "2.1.4"
+  },
+  "scripts": {
+    "install": "grunt"
+  }
+}
