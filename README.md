@@ -7,6 +7,8 @@ Compiles *.scss files when changed. Updates *.scss files during Live Preview.
 
 * Selector highlighting
 * Swap `libsass` for Ruby `sass` compiler implementation
+    * .sass indented syntax support
+* Error highlighting
 
 ## Preferences
 
