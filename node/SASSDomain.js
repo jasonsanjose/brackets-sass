@@ -60,7 +60,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     var originalParent = path.dirname(file),
         tmpDirPath = tmpdir(),
         tmpFolder = tmpDirPath + originalParent,
-        tmpFile = null;
+        tmpFile = tmpFolder + path.sep + path.basename(file);
     
     tmpFolders.push(tmpFolder);
     
