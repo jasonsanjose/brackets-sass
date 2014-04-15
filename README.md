@@ -3,6 +3,11 @@ brackets-sass
 
 Compiles *.scss files when changed. Updates *.scss files during Live Preview.
 
+## Future Plans
+
+* Selector highlighting
+* Swap `libsass` for Ruby `sass` compiler implementation
+
 ## Preferences
 
 These options are passed through to [node-sass](https://github.com/andrew/node-sass).
