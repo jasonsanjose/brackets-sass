@@ -1,7 +1,7 @@
 brackets-sass
 ===========================
 
-Compiles *.scss files when changed.
+Compiles *.scss files when changed. Updates SCSS files during Live Preview.
 
 ## Preferences
 
