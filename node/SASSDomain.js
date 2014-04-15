@@ -62,6 +62,9 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
         tmpFolder = tmpDirPath + originalParent,
         tmpFile = tmpFolder + path.sep + path.basename(file);
     
+    // Delete existing files if they exist
+    fsextra.removeSync(tmpFolder);
+
     tmpFolders.push(tmpFolder);
     
     // Copy files to temp folder
@@ -85,7 +88,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
 
 function deleteTempFiles() {
     tmpFolders.forEach(function (tmpFolder) {
-        fs.unlinkSync(tmpFolder);
+        fsextra.removeSync(tmpFolder);
     });
     
     tmpFolders = [];

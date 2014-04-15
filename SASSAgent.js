@@ -99,16 +99,32 @@ define(function (require, exports, module) {
         
         return map;
     }
+
+    function _setStatus(status, err) {
+        // HACK expose LiveDevelopment._setStatus()
+        LiveDevelopment.status = status;
+        window.$(LiveDevelopment).triggerHandler("statusChange", [status, err]);
+    }
     
     function _docChangeHandler(data) {
         var inMemoryFiles = _getInMemoryFiles(data.docs);
+
+        // Show out of sync while we wait for SASS to compile
+        _setStatus(LiveDevelopment.STATUS_OUT_OF_SYNC);
         
-        Compiler.preview(data.sourceMap._localSources[0], inMemoryFiles).done(function (css, mapText) {
+        Compiler.preview(data.sourceMap._localSources[0], inMemoryFiles).then(function (css, mapText) {
             Inspector.CSS.setStyleSheetText(data.header.styleSheetId, css);
+            
+            // FIXME This will clobber other status (e.g. HTML live preview)
+            _setStatus(LiveDevelopment.STATUS_ACTIVE);
             
             // TODO look for added/removed docs?
             // update SourceMap
             data.sourceMap = _parseSourceMap(data.sourceMap._url, data.sourceMap._mapFile, mapText);
+        }, function (err) {
+            console.error(err);
+
+            _setStatus(LiveDevelopment.STATUS_SYNC_ERROR);
         });
     }
     
@@ -184,6 +200,8 @@ define(function (require, exports, module) {
             _.each(Object.keys(mapSourceURLs), function (sourceURL) {
                 _styleSheetRemoved(null, sourceURL);
             });
+
+            Compiler.deleteTempFiles();
             
             server = null;
         } else if (!server) {

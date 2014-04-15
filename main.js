@@ -147,11 +147,14 @@ define(function (require, exports, module) {
         previewPromise.then(function (response) {
             deferred.resolve(response.css, response.map);
         }, function (err) {
-            console.error(err);
-            deferred.reject();
+            deferred.reject(err);
         });
         
         return deferred.promise();
+    }
+
+    function deleteTempFiles() {
+        return _nodeDomain.exec("deleteTempFiles");
     }
     
     function _fileSystemChange(event, entry, added, removed) {
@@ -187,4 +190,5 @@ define(function (require, exports, module) {
     // Public API
     exports.compile = compile;
     exports.preview = preview;
+    exports.deleteTempFiles = deleteTempFiles;
 });
