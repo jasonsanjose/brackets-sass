@@ -20,66 +20,179 @@
  * DEALINGS IN THE SOFTWARE.
  */
 /*jslint nomen:true, vars:true*/
-/*global window, console, define, brackets, $, Mustache*/
+/*global window, console, define, brackets, $, Mustache, PathUtils*/
 
 define(function (require, exports, module) {
     "use strict";
     
+    var Compiler            = require("main"),
+        SourceMapConsumer   = require("thirdparty/source-map/lib/source-map/source-map-consumer").SourceMapConsumer;
+    
     // Load commonly used modules from Brackets
     var _               = brackets.getModule("thirdparty/lodash"),
-        AppInit         = brackets.getModule("utils/AppInit"),
-        CommandManager  = brackets.getModule("command/CommandManager"),
-        ExtensionUtils  = brackets.getModule("utils/ExtensionUtils"),
-        FileUtils       = brackets.getModule("file/FileUtils"),
+        Async           = brackets.getModule("utils/Async"),
+        DocumentManager = brackets.getModule("document/DocumentManager"),
         FileSystem      = brackets.getModule("filesystem/FileSystem"),
-        Menus           = brackets.getModule("command/Menus"),
-        NodeDomain      = brackets.getModule("utils/NodeDomain");
+        FileUtils       = brackets.getModule("file/FileUtils"),
+        Inspector       = brackets.getModule("LiveDevelopment/Inspector/Inspector"),
+        LiveDevelopment = brackets.getModule("LiveDevelopment/LiveDevelopment");
     
-    // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
-        _nodeDomain = new NodeDomain("sass", _domainPath);
+    var server,
+        mapSourceURLs = {};
     
-    var FILE_EXT_RE     = /\.(sass|scss)$/;
+    var previewDebounce = _.debounce(function (root, inMemoryFiles) {
+        Compiler.preview(root, inMemoryFiles);
+    }, 500);
     
-    // Function to run when the menu item is clicked
-//    function handleHelloWorldCommand() {
-//        // Call helloWorld command in our NodeDomain (node/TemplateDomain.js)
-//        _nodeDomain.exec("helloWorld", "Brackets Extension Template").done(function (retVal) {
-//            window.alert(retVal);
-//        }).fail(function () {
-//            console.error("FAIL");
-//        });
-//    }
-    
-//    function _htmlReady() {
-//        // Inject stylesheet
-//        ExtensionUtils.loadStyleSheet(module, "styles/styles.css");
-//    }
-    
-    function _fileSystemChange(event, entry, added, removed) {
-        if (!entry || !entry.isFile || !entry.name.match(FILE_EXT_RE)) {
-            return;
+    function _parseSourceMap(sourceMapURL, sourceMapFile, text) {
+        var parseURL = PathUtils.parseUrl(sourceMapURL);
+
+        var sourceMap = new SourceMapConsumer(text),
+            localSources = [];
+        
+        sourceMap._url = sourceMapURL;
+        sourceMap._mapFile = sourceMapFile;
+
+        sourceMap.sources.forEach(function (source) {
+            // Gather the source document(s) that generated this CSS file
+            localSources.push(FileSystem.getFileForPath(sourceMap._mapFile.parentPath + source));
+        });
+
+        // Swap generated file relative paths with local absolute paths
+        sourceMap._localSources = localSources;
+
+        // If the generated file name is missing, assume the source-map file name and drop the .map extension
+        if (!sourceMap.file) {
+            sourceMap.file = sourceMap._mapFile.name.slice(0, -4);
         }
+
+        // Set the output document (e.g. cmd line: sass input.scss output.css)
+        sourceMap._outputFile = FileSystem.getFileForPath(sourceMap._mapFile.parentPath + sourceMap.file);
         
-        // file, data, includePaths, imagePaths, outputStyle, sourceComments, sourceMap
-        var renderPromise = _nodeDomain.exec("render", entry.fullPath, null, [entry.parentPath], null, null, null, "map");
+        return sourceMap;
+    }
+    
+    function _getSourceMap(sourceMapURL) {
+        var sourceMapDeferred = new $.Deferred(),
+            sourceMapPath = server.urlToPath(sourceMapURL),
+            sourceMapFile;
+
+        if (!sourceMapPath) {
+            return sourceMapDeferred.resolve().promise();
+        }
+
+        sourceMapFile = FileSystem.getFileForPath(sourceMapPath);
+
+        FileUtils.readAsText(sourceMapFile).then(function (contents) {
+            sourceMapDeferred.resolve(_parseSourceMap(sourceMapURL, sourceMapFile, contents));
+        }, sourceMapDeferred.reject);
+
+        return sourceMapDeferred.promise();
+    }
+    
+    function _getInMemoryFiles(docs) {
+        var map = {};
         
-        renderPromise.then(function (css) {
-            console.log(css);
-        }, function (err) {
-            console.error(err);
+        _.each(docs, function (doc) {
+            map[doc.file.fullPath] = doc.getText();
+        });
+        
+        return map;
+    }
+    
+    function _docChangeHandler(data) {
+        var inMemoryFiles = _getInMemoryFiles(data.docs);
+        
+        Compiler.preview(data.sourceMap._localSources[0], inMemoryFiles).done(function (css, mapText) {
+            Inspector.CSS.setStyleSheetText(data.header.styleSheetId, css);
+            
+            // TODO look for added/removed docs?
+            // update SourceMap
+            data.sourceMap = _parseSourceMap(data.sourceMap._url, data.sourceMap._mapFile, mapText);
         });
     }
     
-    function _appReady() {
-        // All sass/scss files get compiled when changed on disk
-        // TODO preferences to compile on demand, filter for file paths, etc.?
-        FileSystem.on("change", _fileSystemChange);
+    function _installSourceDocumentChangeHandlers(sourceURL, header, sourceMap) {
+        var docs = [],
+            docsPromise;
+        
+        docsPromise = Async.doInParallel(sourceMap._localSources, function (file) {
+            return DocumentManager.getDocumentForPath(file.fullPath).done(function (doc) {
+                docs.push(doc);
+            });
+        });
+        
+        // Install change event handlers for source SCSS/SASS files
+        docsPromise.always(function () {
+            var data = {
+                header: header,
+                sourceMap: sourceMap,
+                docs: docs
+            };
+
+            var changeCallback = function (event, doc, res) {
+                _docChangeHandler(data);
+            };
+            
+            _.each(docs, function (doc) {
+                doc.addRef();
+                $(doc).on("change.sass", changeCallback);
+            });
+            
+            mapSourceURLs[sourceURL] = data;
+        });
     }
     
-    // Load CSS stylesheet after `htmlReady` event is fired
-//    AppInit.htmlReady(_htmlReady);
+    function _styleSheetAdded(event, sourceURL, header) {
+        var existing = mapSourceURLs[sourceURL];
+        
+        // detect duplicates
+        if (existing && existing.styleSheetId === header.styleSheetId) {
+            return;
+        }
+        
+        if (header.sourceMapURL) {
+            var sourceMapURL = sourceURL.replace(new RegExp(PathUtils.parseUrl(sourceURL).filename + "$"), header.sourceMapURL);
+            
+            _getSourceMap(sourceMapURL).done(function (sourceMap) {
+                _installSourceDocumentChangeHandlers(sourceURL, header, sourceMap);
+            });
+        }
+    }
     
-    // Delay initialization until `appReady` event is fired
-    AppInit.appReady(_appReady);
+    function _styleSheetRemoved(event, sourceURL) {
+        var data = mapSourceURLs[sourceURL];
+        
+        delete mapSourceURLs[sourceURL];
+        
+        if (!data) {
+            return;
+        }
+        
+        _.each(data.docs, function (doc) {
+            doc.releaseRef();
+            $(doc).off(".sass");
+        });
+    }
+    
+    function _statusChangeHandler(event, status, reason) {
+        var $CSSAgent = $(LiveDevelopment.agents.css);
+        
+        if (status <= LiveDevelopment.STATUS_INACTIVE) {
+            $CSSAgent.off(".sass");
+            
+            _.each(Object.keys(mapSourceURLs), function (sourceURL) {
+                _styleSheetRemoved(null, sourceURL);
+            });
+            
+            server = null;
+        } else if (!server) {
+            $CSSAgent.on("styleSheetAdded.sass", _styleSheetAdded);
+            $CSSAgent.on("styleSheetRemoved.sass", _styleSheetRemoved);
+            
+            server = LiveDevelopment._getServer();
+        }
+    }
+    
+    $(LiveDevelopment).on("statusChange", _statusChangeHandler);
 });

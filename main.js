@@ -25,6 +25,8 @@
 define(function (require, exports, module) {
     "use strict";
     
+    require("SASSAgent");
+    
     // Load commonly used modules from Brackets
     var _                   = brackets.getModule("thirdparty/lodash"),
         AppInit             = brackets.getModule("utils/AppInit"),
@@ -43,28 +45,18 @@ define(function (require, exports, module) {
         PREF_ENABLED    = "enabled",
         PREF_OPTIONS    = "options";
 
-    var prefs = PreferencesManager.getExtensionPrefs("sass");
+    var extensionPrefs = PreferencesManager.getExtensionPrefs("sass");
     
-    function _render(path, data, options) {
-        var deferred = new $.Deferred(),
-            outputCSSPath = path.replace(FILE_EXT_RE, ".css"),
-            outputMapFile = FileSystem.getFileForPath(outputCSSPath + ".map");
-        
-        options = _.defaults(options || {}, {
-            includePaths: [],
-            outputStyle: "nested",
-            sourceComments: "map",
-            sourceMap: outputMapFile
-        });
+    function _render(path, options) {
+        var deferred = new $.Deferred();
         
         var renderPromise = _nodeDomain.exec("render",
                  path,
-                 data,
                  options.includePaths,
                  options.imagePath,
                  options.outputStyle,
                  options.sourceComments,
-                 outputMapFile.fullPath);
+                 options.sourceMap);
         
         renderPromise.then(function (response) {
             deferred.resolve(response.css, response.map);
@@ -74,62 +66,57 @@ define(function (require, exports, module) {
     }
 
     function _getPreferencesForFile(file) {
-        var doc = DocumentManager.getCurrentDocument(),
-            inputFile = (file || (doc && doc.file)) || null,
-            isSASSFile = (file && file.isFile) && file.name.match(FILE_EXT_RE),
-            fullPath = inputFile && inputFile.fullPath;
+        var isSASSFile = file.isFile && file.name.match(FILE_EXT_RE);
 
         if (!isSASSFile) {
             return;
         }
 
         // TODO (issue 7442): path-scoped preferences in extensions
-        var prefs = PreferencesManager;
-
-        var enabled = (fullPath && prefs.get("sass." + PREF_ENABLED, fullPath)),
-            options = (enabled && prefs.get("sass." + PREF_OPTIONS, fullPath)),
-            output = (options && options.output) || null;
+        var prefs = PreferencesManager, /* extensionPrefs */
+            enabled = prefs.get("sass." + PREF_ENABLED, file.fullPath),
+            options = (enabled && prefs.get("sass." + PREF_OPTIONS, file.fullPath)),
+            outputName = (options && options.output) || file.name.replace(FILE_EXT_RE, ".css"),
+            outputFile;
 
         if (!enabled) {
-            return;
+            return false;
         }
 
-        if (output) {
+        if (outputName) {
             // TODO relative paths in output?
-            output = FileSystem.getFileForPath(inputFile.parentPath + output);
+            outputFile = FileSystem.getFileForPath(file.parentPath + outputName);
         }
 
-        var options = _.defaults(options || {}, {
-            output: output.fullPath,
-            sourceMap: outputMapPath
+        options = _.defaults(options || {}, {
+            includePaths: [],
+            outputStyle: "nested",
+            sourceComments: "map",
+            sourceMap: outputFile.fullPath + ".map"
         });
-    }
-    
-    function renderData(text, options) {
-        return _render(null, text, options);
-    }
-
-    function renderPath(path, options) {
-        return _render(path, null, options);
-    }
-    
-    function compile(inputFile, outputFile, options) {
-        outputFile = outputFile || FileSystem.getFileForPath(inputFile.fullPath.replace(FILE_EXT_RE, ".css"));
         
-        var outputMapPath = outputFile.fullPath + ".map",
+        return {
+            outputFile: outputFile,
+            options: options
+        };
+    }
+    
+    function compile(file) {
+        var prefs = _getPreferencesForFile(file),
             renderPromise;
         
-        options = _.defaults(options || {}, {
-            sourceMap: outputMapPath
-        });
+        if (!prefs) {
+            return;
+        }
         
-        renderPromise = renderPath(inputFile.fullPath, options);
+        renderPromise = _render(file.fullPath, prefs.options);
         
         return renderPromise.then(function (css, map) {
-            FileUtils.writeText(outputFile, css, true);
+            FileUtils.writeText(prefs.outputFile, css, true);
             
             if (map) {
-                var mapFile = FileSystem.getFileForPath(options.sourceMap);
+                // TODO relative paths in sourceMap?
+                var mapFile = FileSystem.getFileForPath(prefs.options.sourceMap);
                 FileUtils.writeText(mapFile, map, true);
             }
         }, function (err) {
@@ -137,34 +124,34 @@ define(function (require, exports, module) {
             console.error(err);
         });
     }
-
-    function _compileWithPreferences(file) {
-        var doc = DocumentManager.getCurrentDocument(),
-            inputFile = (file || (doc && doc.file)) || null,
-            isSASSFile = (file && file.isFile) && file.name.match(FILE_EXT_RE),
-            fullPath = inputFile && inputFile.fullPath;
-
-        if (!isSASSFile) {
+    
+    function preview(file, inMemoryFiles) {
+        var deferred = new $.Deferred(),
+            prefs = _getPreferencesForFile(file),
+            options = prefs.options,
+            previewPromise;
+        
+        if (!prefs) {
             return;
         }
-
-        // TODO (issue 7442): path-scoped preferences in extensions
-        var prefs = PreferencesManager;
-
-        var enabled = (fullPath && prefs.get("sass." + PREF_ENABLED, fullPath)),
-            options = (enabled && prefs.get("sass." + PREF_OPTIONS, fullPath)),
-            output = (options && options.output) || null;
-
-        if (!enabled) {
-            return;
-        }
-
-        if (output) {
-            // TODO relative paths in output?
-            output = FileSystem.getFileForPath(inputFile.parentPath + output);
-        }
-
-        compile(inputFile, output, options);
+        
+        previewPromise = _nodeDomain.exec("preview",
+            file.fullPath,
+            inMemoryFiles,
+            options.includePaths,
+            options.imagePath,
+            options.outputStyle,
+            options.sourceComments,
+            options.sourceMap);
+        
+        previewPromise.then(function (response) {
+            deferred.resolve(response.css, response.map);
+        }, function (err) {
+            console.error(err);
+            deferred.reject();
+        });
+        
+        return deferred.promise();
     }
     
     function _fileSystemChange(event, entry, added, removed) {
@@ -172,14 +159,12 @@ define(function (require, exports, module) {
             return;
         }
         
-        // TODO preferences
-        // whitelist files to compile
-        // node-sass options includePaths, imagePath, outputStyle, sourceComments, sourceMap
-        _compileWithPreferences(entry);
+        compile(entry);
     }
 
     function _prefChangeHandler(event) {
-        _compileWithPreferences();
+        // TODO compile all files?
+        // _compileWithPreferences();
     }
     
     function _appReady() {
@@ -190,16 +175,16 @@ define(function (require, exports, module) {
 
     // FIXME why is change fired during app init?
     // Register preferences
-    prefs.definePreference(PREF_ENABLED, "boolean", true)
+    extensionPrefs.definePreference(PREF_ENABLED, "boolean", true)
         .on("change", _prefChangeHandler);
     
-    prefs.definePreference(PREF_OPTIONS, "object")
+    extensionPrefs.definePreference(PREF_OPTIONS, "object")
         .on("change", _prefChangeHandler);
     
     // Delay initialization until `appReady` event is fired
     AppInit.appReady(_appReady);
     
-    exports.renderPath = renderPath;
-    exports.renderData = renderData;
+    // Public API
     exports.compile = compile;
+    exports.preview = preview;
 });

@@ -1,0 +1,3 @@
+[submodule "thirdparty/source-map"]
+	path = thirdparty/source-map
+	url = https://github.com/mozilla/source-map

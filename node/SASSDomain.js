@@ -26,14 +26,22 @@
 
 "use strict";
 
-var sass = require("node-sass");
+var fs = require("fs"),
+    fsextra = require("fs-extra"),
+    os = require("os"),
+    path = require("path"),
+    sass = require("node-sass");
 
-var _domainManager;
+var _domainManager,
+    tmpFolders = [];
 
-function render(file, data, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+function tmpdir() {
+    return os.tmpdir() + "brackets-sass";
+}
+
+function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
     sass.render({
         file: file,
-        data: data,
         includePaths: includePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
@@ -46,6 +54,41 @@ function render(file, data, includePaths, imagePaths, outputStyle, sourceComment
             callback(error);
         }
     });
+}
+
+function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+    var originalParent = path.dirname(file),
+        tmpDirPath = tmpdir(),
+        tmpFolder = tmpDirPath + originalParent,
+        tmpFile = null;
+    
+    tmpFolders.push(tmpFolder);
+    
+    // Copy files to temp folder
+    fsextra.copySync(originalParent, tmpFolder);
+    
+    // Write in-memory files to temp folder
+    var absPaths = Object.keys(inMemoryFiles),
+        inMemoryText;
+    
+    absPaths.forEach(function (absPath) {
+        inMemoryText = inMemoryFiles[absPath];
+        fs.writeFileSync(tmpDirPath + absPath, inMemoryText);
+    });
+    
+    // Add original file dir as includePath
+    includePaths = includePaths || [];
+    includePaths.unshift(path.dirname(file));
+    
+    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback);
+}
+
+function deleteTempFiles() {
+    tmpFolders.forEach(function (tmpFolder) {
+        fs.unlinkSync(tmpFolder);
+    });
+    
+    tmpFolders = [];
 }
 
 /**
@@ -72,6 +115,32 @@ function init(domainManager) {
             {name: "sourceComments", type: "string"},
             {name: "sourceMap", type: "string"}
         ]
+    );
+    
+    domainManager.registerCommand(
+        "sass",
+        "preview",
+        preview,
+        true,
+        "Returns the path to an application",
+        [
+            {name: "file", type: "string"},
+            {name: "inMemoryFiles", type: "object"},
+            {name: "includePaths", type: "array"},
+            {name: "imagePath", type: "string"},
+            {name: "outputStyle", type: "string"},
+            {name: "sourceComments", type: "string"},
+            {name: "sourceMap", type: "string"}
+        ]
+    );
+    
+    domainManager.registerCommand(
+        "sass",
+        "deleteTempFiles",
+        deleteTempFiles,
+        false,
+        "Delete temporary files used for Live Preview",
+        []
     );
     
     _domainManager = domainManager;
