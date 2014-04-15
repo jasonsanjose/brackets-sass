@@ -1,7 +1,7 @@
 brackets-sass
 ===========================
 
-Compiles *.scss files when changed. Updates SCSS files during Live Preview.
+Compiles *.scss files when changed. Updates *.scss files during Live Preview.
 
 ## Preferences
 
@@ -64,7 +64,3 @@ Default: `<filename>.css.map`.
     }
 }
 ```
-
-## Future Plans
-
-* Live Preview support
