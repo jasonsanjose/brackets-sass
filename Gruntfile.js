@@ -27,13 +27,10 @@ module.exports = function (grunt) {
     // Load dependencies
     require('load-grunt-tasks')(grunt, {pattern: ['grunt-contrib-*']});
     
-    // Load optional requirejs config, see http://requirejs.org/docs/api.html#config
-    var rjsconfig = grunt.file.readJSON("requirejs-config.json");
-    
     grunt.initConfig({
         pkg: grunt.file.readJSON("package.json"),
         jshint: {
-            all: ['**/*.js', '!**/node_modules/**', '!dist/**']
+            all: ['**/*.js', '!**/node_modules/**', '!dist/**', '!thirdparty/**']
         },
         clean: {
             dist: {
@@ -45,6 +42,22 @@ module.exports = function (grunt) {
         },
         /* Non-JavaScript files to include in the build */
         copy: {
+            debug: {
+                files: [
+                    {
+                        expand: true,
+                        dest: 'dist/',
+                        src: [
+                            'package.json',
+                            '**/*.js',
+                            '!node_modules/**',
+                            'node/**',
+                            '!node/node_modules/node-sass/build/**',
+                            '!node/node_modules/node-sass/test/**'
+                        ]
+                    }
+                ]
+            },
             dist: {
                 files: [
                     {
@@ -52,10 +65,9 @@ module.exports = function (grunt) {
                         dest: 'dist/',
                         src: [
                             'package.json',
-                            /* Remove this line when not using Node */
                             'node/**',
-                            /* Remove this line when not using CSS */
-                            'styles/**'
+                            '!node/node_modules/node-sass/build/**',
+                            '!node/node_modules/node-sass/test/**'
                         ]
                     }
                 ]
@@ -66,8 +78,6 @@ module.exports = function (grunt) {
                 // Options: https://github.com/jrburke/r.js/blob/master/build/example.build.js
                 options: {
                     name: 'main',
-                    paths: rjsconfig.paths,
-                    shim: rjsconfig.shim,
                     optimize: 'uglify2',
                     out: 'dist/main.js',
                     generateSourceMaps: true,
@@ -95,6 +105,12 @@ module.exports = function (grunt) {
         'jshint',
         'requirejs',
         'copy',
+        'compress'
+    ]);
+
+    grunt.registerTask('debug', [
+        'clean',
+        'copy:debug',
         'compress'
     ]);
 
