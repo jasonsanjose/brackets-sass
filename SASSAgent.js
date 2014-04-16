@@ -122,7 +122,8 @@ define(function (require, exports, module) {
             // update SourceMap
             data.sourceMap = _parseSourceMap(data.sourceMap._url, data.sourceMap._mapFile, mapText);
         }, function (err) {
-            console.error(err);
+            // TODO show errors in gutter
+            console.log(err);
 
             _setStatus(LiveDevelopment.STATUS_SYNC_ERROR);
         });

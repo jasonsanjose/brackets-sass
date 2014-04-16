@@ -88,7 +88,11 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     // Delete existing files if they exist
     fsextra.removeSync(tmpFolder);
 
+    // Mark folder for delete
     tmpFolders.push(tmpFolder);
+
+    // Adjust sourceMap path
+    sourceMap = tmpDirPath + sourceMap;
     
     // Copy files to temp folder
     fsextra.copySync(originalParent, tmpFolder);
