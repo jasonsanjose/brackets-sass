@@ -36,7 +36,13 @@ var _domainManager,
     tmpFolders = [];
 
 function tmpdir() {
-    return os.tmpdir() + "brackets-sass";
+    var baseTmpDir = os.tmpdir();
+    
+    if (baseTmpDir.charAt(baseTmpDir.length - 1) !== path.sep) {
+        baseTmpDir = baseTmpDir + path.sep;
+    }
+    
+    return baseTmpDir + "brackets-sass";
 }
 
 function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
@@ -56,7 +62,24 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
     });
 }
 
+/**
+ * Normalize path separator, drop drive letter on windows, and
+ * return new string starting with first path separator.
+ * e.g. C:/Users/me/file.txt -> \Users\me\file.txt
+ */
+function normalize(fullPath) {
+    // Convert path separator for windows
+    var result = path.normalize(fullPath);
+    
+    // Drop drive letter
+    var firstSep = result.indexOf(path.sep);
+    return (firstSep >= 0) ? result.slice(firstSep) : result;
+}
+
 function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+    // Convert path separator for windows
+    file = normalize(file);
+    
     var originalParent = path.dirname(file),
         tmpDirPath = tmpdir(),
         tmpFolder = tmpDirPath + originalParent,
@@ -76,12 +99,12 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     
     absPaths.forEach(function (absPath) {
         inMemoryText = inMemoryFiles[absPath];
-        fs.writeFileSync(tmpDirPath + absPath, inMemoryText);
+        fs.writeFileSync(tmpDirPath + normalize(absPath), inMemoryText);
     });
     
     // Add original file dir as includePath
     includePaths = includePaths || [];
-    includePaths.unshift(path.dirname(file));
+    includePaths.unshift(originalParent);
     
     render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback);
 }
