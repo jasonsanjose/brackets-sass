@@ -5,6 +5,8 @@ Compiles *.scss files when changed. Updates *.scss files during Live Preview.
 
 ## Future Plans
 
+* Compile keyboard shortcut (instead of waiting for file changes)
+* Compile when `@import` dependencies are updated
 * Selector highlighting
 * Swap `libsass` for Ruby `sass` compiler implementation
     * .sass indented syntax support
