@@ -1,11 +1,11 @@
 {
   "name": "brackets-sass",
-  "title": "Bracket SASS",
+  "title": "Brackets SASS",
   "homepage": "https://github.com/jasonsanjose/brackets-sass",
   "author": "Jason San Jose",
   "version": "0.1.0",
   "engines": {
-    "brackets": ">=0.37"
+    "brackets": ">=0.38"
   },
   "description": "",
   "devDependencies": {

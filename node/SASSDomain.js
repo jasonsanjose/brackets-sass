@@ -65,7 +65,11 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     // Delete existing files if they exist
     fsextra.removeSync(tmpFolder);
 
+    // Mark folder for delete
     tmpFolders.push(tmpFolder);
+
+    // Adjust sourceMap path
+    sourceMap = tmpDirPath + sourceMap;
     
     // Copy files to temp folder
     fsextra.copySync(originalParent, tmpFolder);
@@ -81,7 +85,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     
     // Add original file dir as includePath
     includePaths = includePaths || [];
-    includePaths.unshift(path.dirname(file));
+    includePaths.unshift(originalParent);
     
     render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback);
 }
