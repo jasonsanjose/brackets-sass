@@ -18,12 +18,15 @@ These options are passed through to [node-sass](https://github.com/andrew/node-s
 
 Reference: [Sample project](https://github.com/jasonsanjose/brackets-source-map-demo-files) and `.brackets.json` preferences file.
 
-### sass.output
-`output` is a `String` relative file path for the output CSS file.
-Default: `<filename>.css`.
+### sass.enabled
+Enable/Disable SASS compilation for a file. Default: `true`
 
 ### sass.options
 Derived from [node-sass](https://github.com/andrew/node-sass) README.
+
+### output
+`output` is a `String` relative file path (relative to the input file) for the output CSS file.
+Default: `<filename>.css`.
 
 #### includePaths
 `includePaths` is an `Array` of path `String`s to look for any `@import`ed files. It is recommended that you use this option if you are using the `data` option and have **any** `@import` directives, as otherwise [libsass] may not find your depended-on files.
@@ -62,7 +65,7 @@ Default: `<filename>.css.map`.
                 "includePaths": [],
                 "imagePath": null,
                 "sourceComments": "map",
-                "sourceMap": "bootstrap.css.min"
+                "sourceMap": "bootstrap.css.map"
                 "outputStyle": "nested"
             }
         },
