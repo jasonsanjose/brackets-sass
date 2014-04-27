@@ -30,6 +30,7 @@ define(function (require, exports, module) {
     // Load commonly used modules from Brackets
     var _                   = brackets.getModule("thirdparty/lodash"),
         AppInit             = brackets.getModule("utils/AppInit"),
+        CodeInspection      = brackets.getModule("language/CodeInspection"),
         DocumentManager     = brackets.getModule("document/DocumentManager"),
         ExtensionUtils      = brackets.getModule("utils/ExtensionUtils"),
         FileUtils           = brackets.getModule("file/FileUtils"),
@@ -41,11 +42,14 @@ define(function (require, exports, module) {
     var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
-    var FILE_EXT_RE     = /\.(sass|scss)$/,
+    var FILE_EXT_RE     = /^[^_].*\.scss$/, /* /^[^_].*\.(sass|scss)$/ */
         PREF_ENABLED    = "enabled",
         PREF_OPTIONS    = "options";
 
-    var extensionPrefs = PreferencesManager.getExtensionPrefs("sass");
+    var firstLaunch = true,
+        extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
+        scannedFileMap = {},
+        partialErrorMap = {};
     
     function _render(path, options) {
         var deferred = new $.Deferred();
@@ -101,6 +105,72 @@ define(function (require, exports, module) {
         };
     }
     
+    function _deferredForScannedPath(path, doAbort) {
+        var deferred = scannedFileMap[path];
+        
+        if (deferred && doAbort) {
+            // Abort current scan
+            deferred.resolve({
+                errors: [],
+                aborted: true
+            });
+
+            deferred = null;
+        }
+        
+        if (!deferred) {
+            deferred = new $.Deferred();
+            scannedFileMap[path] = deferred;
+        }
+        
+        return deferred;
+    }
+    
+    function _finishScan(path, errors) {
+        var scanDeferred = _deferredForScannedPath(path);
+
+        delete scannedFileMap[path];
+
+        // Clear cached errors
+        partialErrorMap = {};
+
+        if (scanDeferred) {
+            var result = {
+                errors: [],
+                aborted: false
+            };
+            
+            errors = errors || [];
+            errors = Array.isArray(errors) ? errors : [errors];
+
+            _.each(errors, function (err) {
+                // Can't report errors on files other than the current document, see CodeInspection
+                if (path !== err.path) {
+                    // Clone error
+                    var clonedError = _.clone(err);
+                    clonedError.pos = _.clone(err.pos);
+
+                    // HACK libsass errors on partials don't include the file extension!
+                    clonedError.path += ".scss";
+
+                    partialErrorMap[clonedError.path] = partialErrorMap[clonedError.path] || [];
+                    partialErrorMap[clonedError.path].push(clonedError);
+
+                    // Omit position if the file path doesn't match
+                    err.pos.line = undefined;
+
+                    // HACK Add path to error message
+                    err.message = err.path + " - " + err.message;
+                }
+
+                err.type = CodeInspection.Type.ERROR;
+                result.errors.push(err);
+            });
+            
+            scanDeferred.resolve(result);
+        }
+    }
+    
     function compile(file) {
         var prefs = _getPreferencesForFile(file),
             renderPromise;
@@ -119,9 +189,10 @@ define(function (require, exports, module) {
                 var mapFile = FileSystem.getFileForPath(prefs.options.sourceMap);
                 FileUtils.writeText(mapFile, map, true);
             }
+            
+            _finishScan(file.fullPath);
         }, function (err) {
-            // TODO display errors in panel?
-            console.error(err);
+            _finishScan(file.fullPath, [err]);
         });
     }
     
@@ -170,10 +241,44 @@ define(function (require, exports, module) {
         // _compileWithPreferences();
     }
     
+    function _scanFileAsync(text, path) {
+        var deferred = _deferredForScannedPath(path, true),
+            doc = DocumentManager.getOpenDocumentForPath(path);
+        
+        if (partialErrorMap[path]) {
+            // Return cached errors for partials (e.g. "_file.scss") and 
+            // other files that aren't directly compiled
+            _finishScan(path, partialErrorMap[path]);
+        } else {
+            // FIXME How to avoid calling preview() followed by compile()?
+            // CodeInspection runs first firing _scanFileAsync. For now,
+            // we just won't show errors when switching to a file that is not dirty
+            var inMemory = {};
+            
+            // TODO use source map to copy other in-memory files to temp dir, see SASSAgent
+            inMemory[doc.file.fullPath] = doc.getText();
+            
+            preview(doc.file, inMemory).then(function () {
+                _finishScan(path);
+            }, function (errors) {
+                _finishScan(path, errors);
+            });
+        }
+        
+        return deferred.promise();
+    }
+    
     function _appReady() {
         // All sass/scss files get compiled when changed on disk
         // TODO preferences to compile on demand, filter for file paths, etc.?
         FileSystem.on("change", _fileSystemChange);
+        
+        CodeInspection.register("scss", {
+            name: "SCSS",
+            scanFileAsync: _scanFileAsync
+        });
+
+        firstLaunch = false;
     }
 
     // FIXME why is change fired during app init?

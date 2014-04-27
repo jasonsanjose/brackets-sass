@@ -22,7 +22,7 @@
  */
 
 
-/*jslint vars: true, plusplus: true, devel: true, node: true, nomen: true, indent: 4, maxerr: 50 */
+/*jslint vars: true, plusplus: true, devel: true, node: true, nomen: true, indent: 4, maxerr: 50, regexp: true */
 
 "use strict";
 
@@ -35,6 +35,9 @@ var fs = require("fs"),
 var _domainManager,
     tmpFolders = [];
 
+// [path]:[line]:[error string]
+var RE_ERROR = /(.*)(:([0-9]+):)(.*)/;
+
 function tmpdir() {
     var baseTmpDir = os.tmpdir();
     
@@ -43,6 +46,21 @@ function tmpdir() {
     }
     
     return baseTmpDir + "brackets-sass";
+}
+
+function parseError(error) {
+    var match = error.match(RE_ERROR);
+    
+    if (!match) {
+        return error;
+    }
+
+    return {
+        errorString: error,
+        path: match[1],
+        pos: { line: parseInt(match[3], 10) - 1, ch: 0 },
+        message: match[4] && match[4].trim()
+    };
 }
 
 function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
@@ -57,7 +75,7 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
             callback(null, { css: css, map: map });
         },
         error: function (error) {
-            callback(error);
+            callback([parseError(error)]);
         }
     });
 }
@@ -110,7 +128,16 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     includePaths = includePaths || [];
     includePaths.unshift(originalParent);
     
-    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback);
+    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function(errors, result) {
+        // Remove tmpdir path prefix from error paths
+        if (errors) {
+            errors.forEach(function (error) {
+                error.path = error.path.replace(tmpDirPath, "");
+            });
+        }
+
+        callback(errors, result);
+    });
 }
 
 function deleteTempFiles() {
