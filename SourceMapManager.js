@@ -218,5 +218,5 @@ define(function (require, exports, module) {
         return this._dependencyMap[sassFile.fullPath] || [];
     };
     
-    return new SourceMapConsumer();
+    return new SourceMapManager();
 });

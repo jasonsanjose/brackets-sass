@@ -37,11 +37,11 @@ define(function (require, exports, module) {
     // Preview SASS content
     
     // Update source maps for Compiler events: sourceMapCompile and sourceMapPreview
-    Compiler.on("sourceMapCompile", function (event, sassFile, sourceMapText, sourceMapFile) {
+    $(Compiler).on("sourceMapCompile", function (event, sassFile, sourceMapText, sourceMapFile) {
         // Parse updated source map
         SourceMapManager.setSourceMapContent(sassFile, sourceMapText, sourceMapFile);
     });
-    Compiler.on("sourceMapPreview", function (event, sassFile, sourceMapText) {
+    $(Compiler).on("sourceMapPreview", function (event, sassFile, sourceMapText) {
         // Parse updated source map
         SourceMapManager.setSourceMapPreview(sassFile, sourceMapText);
     });
