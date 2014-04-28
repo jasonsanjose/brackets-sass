@@ -128,7 +128,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     includePaths = includePaths || [];
     includePaths.unshift(originalParent);
     
-    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function(errors, result) {
+    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
         // Remove tmpdir path prefix from error paths
         if (errors) {
             errors.forEach(function (error) {

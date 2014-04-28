@@ -25,8 +25,9 @@
 define(function (require, exports, module) {
     "use strict";
     
-    var Compiler            = require("main"),
-        SourceMapConsumer   = require("thirdparty/source-map/lib/source-map/source-map-consumer").SourceMapConsumer;
+    var Compiler            = require("Compiler"),
+        SourceMapConsumer   = require("thirdparty/source-map/lib/source-map/source-map-consumer").SourceMapConsumer,
+        SourceMapManager    = require("SourceMapManager");
     
     // Load commonly used modules from Brackets
     var _               = brackets.getModule("thirdparty/lodash"),
@@ -169,11 +170,15 @@ define(function (require, exports, module) {
         }
         
         if (header.sourceMapURL) {
-            var sourceMapURL = sourceURL.replace(new RegExp(PathUtils.parseUrl(sourceURL).filename + "$"), header.sourceMapURL);
+            var sourceMapURL = sourceURL.replace(new RegExp(PathUtils.parseUrl(sourceURL).filename + "$"), header.sourceMapURL),
+                sourceMapPath = server.urlToPath(sourceMapURL),
+                cssPath = server.urlToPath(sourceURL),
+                cssFile = cssPath && FileSystem.getFileForPath(cssPath),
+                sourceMapFile = sourceMapPath && FileSystem.getFileForPath(sourceMapPath);
             
-            _getSourceMap(sourceMapURL).done(function (sourceMap) {
-                _installSourceDocumentChangeHandlers(sourceURL, header, sourceMap);
-            });
+            if (sourceMapFile) {
+                $(exports).triggerHandler("sourceMapChanged", []);
+            }
         }
     }
     
