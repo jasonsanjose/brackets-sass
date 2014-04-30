@@ -37,13 +37,13 @@ define(function (require, exports, module) {
     // Preview SASS content
     
     // Update source maps for Compiler events: sourceMapCompile and sourceMapPreview
-    $(Compiler).on("sourceMapCompile", function (event, sassFile, sourceMapText, sourceMapFile) {
+    $(Compiler).on("sourceMapCompile", function (event, cssFile, sourceMapText, sourceMapFile) {
         // Parse updated source map
-        SourceMapManager.setSourceMapContent(sassFile, sourceMapText, sourceMapFile);
+        SourceMapManager.setSourceMapContent(cssFile, sourceMapText, sourceMapFile);
     });
-    $(Compiler).on("sourceMapPreview", function (event, sassFile, sourceMapText) {
+    $(Compiler).on("sourceMapPreview", function (event, cssFile, sourceMapText) {
         // Parse updated source map
-        SourceMapManager.setSourceMapPreview(sassFile, sourceMapText);
+        SourceMapManager.setSourceMapPreview(cssFile, sourceMapText);
     });
     
     /**

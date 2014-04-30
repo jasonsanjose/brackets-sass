@@ -170,10 +170,10 @@ define(function (require, exports, module) {
         }
         
         if (header.sourceMapURL) {
-            var sourceMapURL = sourceURL.replace(new RegExp(PathUtils.parseUrl(sourceURL).filename + "$"), header.sourceMapURL),
-                sourceMapPath = server.urlToPath(sourceMapURL),
-                cssPath = server.urlToPath(sourceURL),
+            var cssPath = server.urlToPath(sourceURL),
                 cssFile = cssPath && FileSystem.getFileForPath(cssPath),
+                sourceMapURL = sourceURL.replace(new RegExp(PathUtils.parseUrl(sourceURL).filename + "$"), header.sourceMapURL),
+                sourceMapPath = server.urlToPath(sourceMapURL),
                 sourceMapFile = sourceMapPath && FileSystem.getFileForPath(sourceMapPath);
             
             if (sourceMapFile) {

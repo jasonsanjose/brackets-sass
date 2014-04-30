@@ -45,42 +45,42 @@ define(function (require, exports, module) {
     
     /**
      *
-     * @param {!File} sassFile
+     * @param {!File} cssFile
      */
-    SourceMapManager.prototype.deleteSourceMap = function (sassFile) {
-        this.deleteSourceMapPreview(sassFile);
-        delete this._sourceMaps[sassFile.fullPath];
+    SourceMapManager.prototype.deleteSourceMap = function (cssFile) {
+        this.deleteSourceMapPreview(cssFile);
+        delete this._sourceMaps[cssFile.fullPath];
     };
     
     /**
      *
-     * @param {!File} sassFile
+     * @param {!File} cssFile
      */
-    SourceMapManager.prototype.deleteSourceMapPreview = function (sassFile) {
-        delete this._sourceMapPreviews[sassFile.fullPath];
+    SourceMapManager.prototype.deleteSourceMapPreview = function (cssFile) {
+        delete this._sourceMapPreviews[cssFile.fullPath];
     };
     
     /**
      *
-     * @param {!File} sassFile
+     * @param {!File} cssFile
      */
-    SourceMapManager.prototype.getSourceMap = function (sassFile) {
-        var preview = this._sourceMapPreviews[sassFile.fullPath];
+    SourceMapManager.prototype.getSourceMap = function (cssFile) {
+        var preview = this._sourceMapPreviews[cssFile.fullPath];
         
         if (preview) {
             return preview;
         }
         
-        return this._sourceMaps[sassFile.fullPath];
+        return this._sourceMaps[cssFile.fullPath];
     };
     
     /**
      *
-     * @param {!File} sassFile
+     * @param {!File} cssFile
      */
-    SourceMapManager.prototype.getSourceDocuments = function (sassFile) {
+    SourceMapManager.prototype.getSourceDocuments = function (cssFile) {
         var deferred = new $.Deferred(),
-            sourceMap = this.getSourceMap(sassFile),
+            sourceMap = this.getSourceMap(cssFile),
             docs = [],
             docsPromise;
         
@@ -125,10 +125,10 @@ define(function (require, exports, module) {
     
     /**
      *
-     * @param {!File} sassFile
+     * @param {!File} cssFile
      * @param {!(File|string)} sourceMapFile
      */
-    SourceMapManager.prototype.setSourceMapFile = function (sassFile, sourceMapFile) {
+    SourceMapManager.prototype.setSourceMapFile = function (cssFile, sourceMapFile) {
         var self = this,
             deferred = new $.Deferred(),
             sourceMapFileResult = new $.Deferred();
@@ -138,7 +138,7 @@ define(function (require, exports, module) {
             
             // Change relative URLs to absolute
             if (!PathUtils.isAbsoluteUrl(sourceMapRelPath)) {
-                sourceMapRelPath = sassFile.parentPath + sourceMapRelPath;
+                sourceMapRelPath = cssFile.parentPath + sourceMapRelPath;
             }
             
             // Resolve to a File
@@ -151,7 +151,7 @@ define(function (require, exports, module) {
             // Read source map from disk
             FileUtils.readAsText(sourceMapFileResolved).then(function (text) {
                 // Parse source map text
-                var sourceMap = self.setSourceMapContent(sassFile, sourceMapFileResolved, text);
+                var sourceMap = self.setSourceMapContent(cssFile, sourceMapFileResolved, text);
                 deferred.resolve(sourceMap);
             }, deferred.reject);
         }, deferred.reject);
@@ -161,11 +161,11 @@ define(function (require, exports, module) {
     
     /**
      *
-     * @param {!File} sassFile
+     * @param {!File} cssFile
      * @param {!string} sourceMapText
      * @param {?File} sourceMapFile
      */
-    SourceMapManager.prototype.setSourceMapContent = function (sassFile, sourceMapText, sourceMapFile, isPreview) {
+    SourceMapManager.prototype.setSourceMapContent = function (cssFile, sourceMapText, sourceMapFile, isPreview) {
         var self = this,
             sourceMap = new SourceMapConsumer(sourceMapText),
             localSources = [];
@@ -174,7 +174,7 @@ define(function (require, exports, module) {
         // even when a user specifies that source maps should not be saved to
         // disk. If a sourceMapFile is not provided, assume localSources paths
         // are relative to the input cssFile.
-        var parentPath = (sourceMapFile || sassFile).parentPath;
+        var parentPath = (sourceMapFile || cssFile).parentPath;
 
         sourceMap.sources.forEach(function (source) {
             // Gather the source document(s) that generated this CSS file
@@ -183,7 +183,7 @@ define(function (require, exports, module) {
             
             // Map each source as a dependency for the input cssFile
             self._dependencyMap[localSourceFile.fullPath] = self._dependencyMap[localSourceFile.fullPath] || [];
-            self._dependencyMap[localSourceFile.fullPath].push(sassFile);
+            self._dependencyMap[localSourceFile.fullPath].push(cssFile);
         });
 
         // Swap generated file relative paths with local absolute paths
@@ -198,24 +198,24 @@ define(function (require, exports, module) {
         
         // Cache source map
         if (isPreview) {
-            this._sourceMaps[sassFile.fullPath] = sourceMap;
+            this._sourceMaps[cssFile.fullPath] = sourceMap;
         } else {
-            this._sourceMapPreviews[sassFile.fullPath] = sourceMap;
+            this._sourceMapPreviews[cssFile.fullPath] = sourceMap;
         }
         
         return sourceMap;
     };
     
-    SourceMapManager.prototype.setSourceMapPreview = function (sassFile, sourceMapText, sourceMapFile) {
-        this.setSourceMapContent(sassFile, sourceMapText, sourceMapFile, true);
+    SourceMapManager.prototype.setSourceMapPreview = function (cssFile, sourceMapText, sourceMapFile) {
+        this.setSourceMapContent(cssFile, sourceMapText, sourceMapFile, true);
     };
     
     /**
      *
-     * @param {!File} sassFile
+     * @param {!File} cssFile
      */
-    SourceMapManager.prototype.getUsageForFile = function (sassFile) {
-        return this._dependencyMap[sassFile.fullPath] || [];
+    SourceMapManager.prototype.getUsageForFile = function (cssFile) {
+        return this._dependencyMap[cssFile.fullPath] || [];
     };
     
     return new SourceMapManager();

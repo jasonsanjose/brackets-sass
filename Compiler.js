@@ -39,7 +39,7 @@ define(function (require, exports, module) {
     var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
-    var FILE_EXT_RE     = /^[^_].*\.scss$/, /* /^[^_].*\.(sass|scss)$/ */
+    var FILE_EXT_RE     = /^[^_].*\.scss$/, /* Add .sass later... /^[^_].*\.(sass|scss)$/ */
         PREF_ENABLED    = "enabled",
         PREF_OPTIONS    = "options";
 
@@ -193,7 +193,7 @@ define(function (require, exports, module) {
                 var mapFile = FileSystem.getFileForPath(prefs.options.sourceMap);
                 FileUtils.writeText(mapFile, map, true);
                 
-                $(exports).triggerHandler("sourceMapCompile", [sassFile, map, mapFile]);
+                $(exports).triggerHandler("sourceMapCompile", [prefs.outputFile, map, mapFile]);
             }
             
             _finishScan(sassFile);
@@ -223,7 +223,7 @@ define(function (require, exports, module) {
         
         previewPromise.then(function (response) {
             _finishScan(sassFile);
-            $(exports).triggerHandler("sourceMapPreview", [sassFile, response.map]);
+            $(exports).triggerHandler("sourceMapPreview", [prefs.outputFile, response.map]);
             
             deferred.resolve(response.css, response.map);
         }, function (errors) {
