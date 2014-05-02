@@ -55,12 +55,12 @@ define(function (require, exports, module) {
     // Augment CSSUtils.findMatchingRules to support source maps
     var baseFindMatchingRules = CSSUtils.findMatchingRules;
     
-    function _convertMatchingRuleResult(resultSelector) {
+    function _convertMatchingRuleResult(selectorCache, generatedResult) {
         // Check CSS text for a sourceMappingURL
         var oneResult = new $.Deferred(),
-            cssFile = resultSelector.document.file,
+            cssFile = generatedResult.document.file,
             sourceMapPromise = SourceMapManager.getSourceMap(cssFile),
-            match = !sourceMapPromise && SourceMapManager.getSourceMappingURL(resultSelector.document.getText());
+            match = !sourceMapPromise && SourceMapManager.getSourceMappingURL(generatedResult.document.getText());
         
         if (match) {
             sourceMapPromise = SourceMapManager.setSourceMapFile(cssFile, match);
@@ -68,22 +68,51 @@ define(function (require, exports, module) {
 
         if (sourceMapPromise) {
             sourceMapPromise.then(function (sourceMap) {
-                var info = resultSelector.selectorInfo,
+                var info = generatedResult.selectorInfo,
                     generatedPos = { line: info.selectorStartLine + 1, column: info.selectorStartChar },
                     origPos = sourceMap.originalPositionFor(generatedPos),
-                    newResult = _.clone(resultSelector);
-                
-                // TODO fill in newResult
-                newResult.lineStart = origPos.line - 1;
-                
-                // TODO Find end of declaration
-                newResult.lineEnd = newResult.lineStart + 1;
+                    newResult;
                 
                 SourceMapManager.getSourceDocument(cssFile, origPos.source).then(function (doc) {
-                    newResult.document = doc;
+                    var selectors = selectorCache[doc.file.fullPath],
+                        selector,
+                        origLine = origPos.line - 1;
+
+                    // HACK? Use CSSUtils to parse SASS selectors
+                    if (!selectors) {
+                        selectors = CSSUtils.extractAllSelectors(doc.getText());
+                        selectorCache[doc.file.fullPath] = selectors;
+                    }
+
+                    // Find the original SASS selector based on the sourceMap position
+                    for (var i = 0; i < selectors.length; i++) {
+                        selector = selectors[i];
+
+                        if ((origLine >= selector.ruleStartLine) && (origLine <= selector.selectorEndLine)) {
+                            break;
+                        } else if (origLine < selector.ruleStartLine) {
+                            // HACK We may skip over the actual rule/mixin due to our limited SASS parsing
+                            break;
+                        }
+                    }
+
+                    if (selector) {
+                        // FIXME bad names due to single line '//' comments
+                        newResult = {
+                            name: selector.selector,
+                            document: doc,
+                            lineStart: selector.ruleStartLine,
+                            lineEnd: selector.declListEndLine,
+                            selectorGroup: selector.selectorGroup
+                        };
+                    }
 
                     // Overwrite original result
-                    oneResult.resolve(newResult);
+                    if (newResult) {
+                        oneResult.resolve(newResult);
+                    } else {
+                        oneResult.reject();
+                    }
                 }, oneResult.reject);
             }, function () {
                 // Source map error, use the original result
@@ -103,12 +132,13 @@ define(function (require, exports, module) {
     function findMatchingRules(selector, htmlDocument) {
         var basePromise = baseFindMatchingRules(selector, htmlDocument),
             deferred = new $.Deferred(),
-            newResults = [];
+            newResults = [],
+            selectorCache = {};
         
         // Check CSS file results for an associated source map
         basePromise.then(function (resultSelectors) {
             var parallelPromise = Async.doInParallel(resultSelectors, function (resultSelector, index) {
-                var onePromise = _convertMatchingRuleResult(resultSelector);
+                var onePromise = _convertMatchingRuleResult(selectorCache, resultSelector);
                 
                 onePromise.then(function (newResult) {
                     // Use new SASS results
