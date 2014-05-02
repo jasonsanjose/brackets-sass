@@ -29,22 +29,107 @@ define(function (require, exports, module) {
         SASSAgent           = require("SASSAgent"),
         SourceMapManager    = require("SourceMapManager");
     
-    var AppInit             = brackets.getModule("utils/AppInit"),
+    var _                   = brackets.getModule("thirdparty/lodash"),
+        AppInit             = brackets.getModule("utils/AppInit"),
+        Async               = brackets.getModule("utils/Async"),
+        CSSUtils            = brackets.getModule("language/CSSUtils"),
         CodeInspection      = brackets.getModule("language/CodeInspection"),
         DocumentManager     = brackets.getModule("document/DocumentManager"),
         FileSystem          = brackets.getModule("filesystem/FileSystem");
     
-    // Preview SASS content
+    // Return pending promises until preview completes
+    $(Compiler).on("sourceMapPreviewStart", function (event, sassFile, cssFile) {
+        SourceMapManager.setSourceMapPending(cssFile);
+    });
     
-    // Update source maps for Compiler events: sourceMapCompile and sourceMapPreview
-    $(Compiler).on("sourceMapCompile", function (event, cssFile, sourceMapText, sourceMapFile) {
-        // Parse updated source map
-        SourceMapManager.setSourceMapContent(cssFile, sourceMapText, sourceMapFile);
+    // Update source map when preview completes and resolve promise
+    $(Compiler).on("sourceMapPreviewEnd", function (event, sassFile, data) {
+        SourceMapManager.setSourceMap(sassFile, data.css, data.sass);
     });
-    $(Compiler).on("sourceMapPreview", function (event, cssFile, sourceMapText) {
-        // Parse updated source map
-        SourceMapManager.setSourceMapPreview(cssFile, sourceMapText);
+    
+    // Reject promise waiting for a source map
+    $(Compiler).on("sourceMapPreviewError", function (event, sassFile, errors) {
+        SourceMapManager.setSourceMap(sassFile);
     });
+    
+    // Augment CSSUtils.findMatchingRules to support source maps
+    var baseFindMatchingRules = CSSUtils.findMatchingRules;
+    
+    function _convertMatchingRuleResult(resultSelector) {
+        // Check CSS text for a sourceMappingURL
+        var oneResult = new $.Deferred(),
+            cssFile = resultSelector.document.file,
+            sourceMapPromise = SourceMapManager.getSourceMap(cssFile),
+            match = !sourceMapPromise && SourceMapManager.getSourceMappingURL(resultSelector.document.getText());
+        
+        if (match) {
+            sourceMapPromise = SourceMapManager.setSourceMapFile(cssFile, match);
+        }
+
+        if (sourceMapPromise) {
+            sourceMapPromise.then(function (sourceMap) {
+                var info = resultSelector.selectorInfo,
+                    generatedPos = { line: info.selectorStartLine + 1, column: info.selectorStartChar },
+                    origPos = sourceMap.originalPositionFor(generatedPos),
+                    newResult = _.clone(resultSelector);
+                
+                // TODO fill in newResult
+                newResult.lineStart = origPos.line - 1;
+                
+                // TODO Find end of declaration
+                newResult.lineEnd = newResult.lineStart + 1;
+                
+                SourceMapManager.getSourceDocument(cssFile, origPos.source).then(function (doc) {
+                    newResult.document = doc;
+
+                    // Overwrite original result
+                    oneResult.resolve(newResult);
+                }, oneResult.reject);
+            }, function () {
+                // Source map error, use the original result
+                oneResult.reject();
+            });
+        } else {
+            // No source map for this result
+            oneResult.reject();
+        }
+
+        return oneResult.promise();
+    }
+    
+    /**
+     * Replace matched CSS rules with SASS rules
+     */
+    function findMatchingRules(selector, htmlDocument) {
+        var basePromise = baseFindMatchingRules(selector, htmlDocument),
+            deferred = new $.Deferred(),
+            newResults = [];
+        
+        // Check CSS file results for an associated source map
+        basePromise.then(function (resultSelectors) {
+            var parallelPromise = Async.doInParallel(resultSelectors, function (resultSelector, index) {
+                var onePromise = _convertMatchingRuleResult(resultSelector);
+                
+                onePromise.then(function (newResult) {
+                    // Use new SASS results
+                    newResults[index] = newResult;
+                }, function () {
+                    // Use original result
+                    newResults[index] = resultSelector;
+                });
+                
+                return onePromise;
+            });
+            
+            parallelPromise.always(function () {
+                deferred.resolve(newResults);
+            });
+        }, deferred.reject);
+        
+        return deferred.promise();
+    }
+    
+    CSSUtils.findMatchingRules = findMatchingRules;
     
     /**
      * @private
@@ -53,7 +138,7 @@ define(function (require, exports, module) {
      * @param {!path} path
      */
     function _scanFileAsync(text, path) {
-        var promise = Compiler.getErrorPromise(path);
+        var promise = Compiler.getErrors(path);
         
         // If the promise is resolved, errors were cached when the file was
         // compiled as a partial.
@@ -61,12 +146,14 @@ define(function (require, exports, module) {
             // FIXME How to avoid calling preview() followed by compile()?
             // CodeInspection runs first firing _scanFileAsync. For now,
             // we just won't show errors when switching to a file that is not dirty
-            var sassFile = FileSystem.getFileForPath(path),
-                inMemoryDocsPromise = SourceMapManager.getSourceDocuments(sassFile);
-            
-            inMemoryDocsPromise.then(function (docs) {
-                return Compiler.preview(sassFile, docs);
-            });
+            var sassFile = FileSystem.getFileForPath(path);
+
+            // FIXME compile input SASS file (i.e. not partials) with in-memory document content
+            // var inMemoryDocsPromise = SourceMapManager.getSourceDocuments(sassFile);
+            // inMemoryDocsPromise.then(function (docs) {
+            var docs = [DocumentManager.getOpenDocumentForPath(path)];
+            Compiler.preview(sassFile, docs);
+            //});
         }
         
         return promise;

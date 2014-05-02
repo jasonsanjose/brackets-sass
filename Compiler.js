@@ -39,7 +39,7 @@ define(function (require, exports, module) {
     var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
-    var FILE_EXT_RE     = /^[^_].*\.scss$/, /* Add .sass later... /^[^_].*\.(sass|scss)$/ */
+    var RE_FILE_EXT     = /^[^_].*\.scss$/, /* Add .sass later... /^[^_].*\.(sass|scss)$/ */
         PREF_ENABLED    = "enabled",
         PREF_OPTIONS    = "options";
 
@@ -66,17 +66,11 @@ define(function (require, exports, module) {
     }
 
     function _getPreferencesForFile(file) {
-        var isSASSFile = file.isFile && file.name.match(FILE_EXT_RE);
-
-        if (!isSASSFile) {
-            return;
-        }
-
         // TODO (issue 7442): path-scoped preferences in extensions
         var prefs = PreferencesManager, /* extensionPrefs */
             enabled = prefs.get("sass." + PREF_ENABLED, file.fullPath),
             options = (enabled && prefs.get("sass." + PREF_OPTIONS, file.fullPath)),
-            outputName = (options && options.output) || file.name.replace(FILE_EXT_RE, ".css"),
+            outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputFile;
 
         if (!enabled) {
@@ -96,7 +90,8 @@ define(function (require, exports, module) {
         });
         
         return {
-            outputFile: outputFile,
+            outputCSSFile: outputFile,
+            outputSourceMapFile: options.sourceMap && FileSystem.getFileForPath(options.sourceMap),
             options: options
         };
     }
@@ -126,8 +121,19 @@ define(function (require, exports, module) {
         return _deferredForScannedPath(path, true).promise();
     }
     
-    function _finishScan(path, errors) {
-        var scanDeferred = _deferredForScannedPath(path);
+    function _getInMemoryFiles(docs) {
+        var map = {};
+        
+        _.each(docs, function (doc) {
+            map[doc.file.fullPath] = doc.getText();
+        });
+        
+        return map;
+    }
+    
+    function _finishScan(file, errors) {
+        var path = file.fullPath,
+            scanDeferred = _deferredForScannedPath(path);
 
         // Clear cached errors
         partialErrorMap = {};
@@ -176,7 +182,10 @@ define(function (require, exports, module) {
     }
     
     function compile(sassFile) {
-        var prefs = _getPreferencesForFile(sassFile),
+        var prefs = _getPreferencesForFile(sassFile);
+            cssFile = prefs.outputCSSFile,
+            hasSourceMap = prefs.sourceComments === "map",
+            mapFile = hasSourceMap && prefs.outputSourceMapFile,
             renderPromise;
         
         if (!prefs) {
@@ -186,14 +195,23 @@ define(function (require, exports, module) {
         renderPromise = _render(sassFile.fullPath, prefs.options);
         
         return renderPromise.then(function (css, map) {
-            FileUtils.writeText(prefs.outputFile, css, true);
+            var eventData = {
+                    css: {
+                        file: cssFile,
+                        contents: css
+                    }
+                };
+            
+            FileUtils.writeText(cssFile, css, true);
             
             if (map) {
                 // TODO relative paths in sourceMap?
-                var mapFile = FileSystem.getFileForPath(prefs.options.sourceMap);
                 FileUtils.writeText(mapFile, map, true);
                 
-                $(exports).triggerHandler("sourceMapCompile", [prefs.outputFile, map, mapFile]);
+                eventData.sourceMap = {
+                    file: mapFile,
+                    contents: map
+                };
             }
             
             _finishScan(sassFile);
@@ -202,15 +220,20 @@ define(function (require, exports, module) {
         });
     }
     
-    function preview(sassFile, inMemoryFiles) {
+    function preview(sassFile, docs) {
         var deferred = new $.Deferred(),
             prefs = _getPreferencesForFile(sassFile),
+            cssFile = prefs.outputCSSFile,
+            mapFile = prefs.outputSourceMapFile,
             options = prefs.options,
-            previewPromise;
+            previewPromise,
+            inMemoryFiles = _getInMemoryFiles(docs);
         
         if (!prefs) {
             return;
         }
+        
+        $(exports).triggerHandler("sourceMapPreviewStart", [sassFile, cssFile]);
         
         previewPromise = _nodeDomain.exec("preview",
             sassFile.fullPath,
@@ -218,15 +241,27 @@ define(function (require, exports, module) {
             options.includePaths,
             options.imagePath,
             options.outputStyle,
-            "map",                                  /* always output sourceMap */
-            prefs.outputFile.fullPath + ".map");    /* preview sourceMap in same parent folder */
+            "map",
+            mapFile.fullPath);
         
         previewPromise.then(function (response) {
+            var eventData = {
+                css: {
+                    file: cssFile,
+                    contents: response.css
+                },
+                sourceMap: {
+                    file: mapFile,
+                    contents: response.map
+                }
+            };
+            
+            $(exports).triggerHandler("sourceMapPreviewEnd", [sassFile, eventData]);
             _finishScan(sassFile);
-            $(exports).triggerHandler("sourceMapPreview", [prefs.outputFile, response.map]);
             
             deferred.resolve(response.css, response.map);
         }, function (errors) {
+            $(exports).triggerHandler("sourceMapPreviewError", [sassFile, errors]);
             _finishScan(sassFile, errors);
             
             deferred.reject(errors);
@@ -240,7 +275,7 @@ define(function (require, exports, module) {
     }
     
     function _fileSystemChange(event, entry, added, removed) {
-        if (!entry || !entry.isFile) {
+        if (!entry || !entry.isFile || !entry.name.match(RE_FILE_EXT)) {
             return;
         }
         
@@ -252,7 +287,7 @@ define(function (require, exports, module) {
         // _compileWithPreferences();
     }
     
-    // All sass/scss files get compiled when changed on disk
+    // All SASS files get compiled when changed on disk
     // TODO preferences to compile on demand, filter for file paths, etc.?
     FileSystem.on("change", _fileSystemChange);
         
