@@ -26,6 +26,7 @@ define(function (require, exports, module) {
     "use strict";
     
     var Compiler            = require("Compiler"),
+        NestedStyleParser   = require("NestedStyleParser"),
         SASSAgent           = require("SASSAgent"),
         SourceMapManager    = require("SourceMapManager");
     
@@ -68,8 +69,10 @@ define(function (require, exports, module) {
 
         if (sourceMapPromise) {
             sourceMapPromise.then(function (sourceMap) {
+                // TODO core brackets change to add selectorInfo 
+                // generatedPos = { line: info.selectorStartLine + 1, column: info.selectorStartChar },
                 var info = generatedResult.selectorInfo,
-                    generatedPos = { line: info.selectorStartLine + 1, column: info.selectorStartChar },
+                    generatedPos = { line: generatedResult.lineStart + 1, column: 0 },
                     origPos = sourceMap.originalPositionFor(generatedPos),
                     newResult;
                 
@@ -80,7 +83,7 @@ define(function (require, exports, module) {
 
                     // HACK? Use CSSUtils to parse SASS selectors
                     if (!selectors) {
-                        selectors = CSSUtils.extractAllSelectors(doc.getText());
+                        selectors = NestedStyleParser.extractAllSelectors(doc.getText());
                         selectorCache[doc.file.fullPath] = selectors;
                     }
 
@@ -97,9 +100,11 @@ define(function (require, exports, module) {
                     }
 
                     if (selector) {
-                        // FIXME bad names due to single line '//' comments
+                        // CSSUtils can't handle single line '//' comments
+                        var name = selector.selector.replace("//.*\n", "");
+                        
                         newResult = {
-                            name: selector.selector,
+                            name: name,
                             document: doc,
                             lineStart: selector.ruleStartLine,
                             lineEnd: selector.declListEndLine,
