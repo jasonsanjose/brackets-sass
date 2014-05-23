@@ -69,13 +69,9 @@ define(function (require, exports, module) {
         // TODO (issue 7442): path-scoped preferences in extensions
         var prefs = PreferencesManager, /* extensionPrefs */
             enabled = prefs.get("sass." + PREF_ENABLED, file.fullPath),
-            options = (enabled && prefs.get("sass." + PREF_OPTIONS, file.fullPath)),
+            options = prefs.get("sass." + PREF_OPTIONS, file.fullPath),
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputFile;
-
-        if (!enabled) {
-            return false;
-        }
 
         if (outputName) {
             // TODO relative paths in output?
@@ -90,9 +86,10 @@ define(function (require, exports, module) {
         });
         
         return {
+            enabled: enabled,
+            options: options,
             outputCSSFile: outputFile,
-            outputSourceMapFile: options.sourceMap && FileSystem.getFileForPath(options.sourceMap),
-            options: options
+            outputSourceMapFile: options.sourceMap && FileSystem.getFileForPath(options.sourceMap)
         };
     }
     
@@ -182,16 +179,17 @@ define(function (require, exports, module) {
     }
     
     function compile(sassFile) {
-        var prefs = _getPreferencesForFile(sassFile),
-            cssFile = prefs.outputCSSFile,
+        var prefs = _getPreferencesForFile(sassFile);
+
+        if (!prefs.enabled) {
+            return new $.Deferred().reject().promise();
+        }
+
+        var cssFile = prefs.outputCSSFile,
             options = prefs.options,
             hasSourceMap = options.sourceComments === "map",
             mapFile = prefs.outputSourceMapFile,
             renderPromise;
-        
-        if (!prefs) {
-            return;
-        }
         
         renderPromise = _render(sassFile.fullPath, prefs.options);
         
@@ -230,10 +228,6 @@ define(function (require, exports, module) {
             previewPromise,
             inMemoryFiles = _getInMemoryFiles(docs);
         
-        if (!prefs) {
-            return deferred.reject().promise();
-        }
-        
         $(exports).triggerHandler("sourceMapPreviewStart", [sassFile, cssFile]);
         
         previewPromise = _nodeDomain.exec("preview",
@@ -262,7 +256,7 @@ define(function (require, exports, module) {
             
             deferred.resolve(response.css, response.map);
         }, function (errors) {
-            $(exports).triggerHandler("sourceMapPreviewError", [sassFile, errors]);
+            $(exports).triggerHandler("sourceMapPreviewError", [sassFile, cssFile, errors]);
             _finishScan(sassFile, errors);
             
             deferred.reject(errors);

@@ -53,16 +53,17 @@ define(function (require, exports, module) {
     function _docChangeHandler(data) {
         // Show out of sync while we wait for SASS to compile
         _setStatus(LiveDevelopment.STATUS_OUT_OF_SYNC);
-        
-        Compiler.preview(data.sourceMap._localSources[0], data.docs).then(function (css, mapText) {
-            Inspector.CSS.setStyleSheetText(data.header.styleSheetId, css);
-            
-            // FIXME This will clobber other status (e.g. HTML live preview)
-            _setStatus(LiveDevelopment.STATUS_ACTIVE);
-            
-            // TODO look for added/removed docs?
-            // update SourceMap
-            data.sourceMap = SourceMapManager.setSourceMap(data.cssFile, null, mapText);
+
+        var sourceMapPromise = SourceMapManager.getSourceMap(data.cssFile);
+
+        sourceMapPromise.then(function (sourceMap) {
+            return Compiler.preview(sourceMap._localSources[0], data.docs).then(function (css) {
+                Inspector.CSS.setStyleSheetText(data.header.styleSheetId, css);
+                
+                // TODO look for added/removed docs?
+                // FIXME This will clobber other status (e.g. HTML live preview)
+                _setStatus(LiveDevelopment.STATUS_ACTIVE);
+            });
         }, function (err) {
             // TODO show errors in gutter
             console.log(err);
@@ -71,13 +72,16 @@ define(function (require, exports, module) {
         });
     }
     
-    function _installSourceDocumentChangeHandlers(cssFile, sourceURL, header, sourceMap) {
+    function _installSourceDocumentChangeHandlers(cssFile, sourceURL, header) {
         var docs = [],
+            sourceMapPromise = SourceMapManager.getSourceMap(cssFile),
             docsPromise;
-        
-        docsPromise = Async.doInParallel(sourceMap._localSources, function (file) {
-            return DocumentManager.getDocumentForPath(file.fullPath).done(function (doc) {
-                docs.push(doc);
+
+        docsPromise = sourceMapPromise.then(function (sourceMap) {
+            return Async.doInParallel(sourceMap._localSources, function (file) {
+                return DocumentManager.getDocumentForPath(file.fullPath).done(function (doc) {
+                    docs.push(doc);
+                });
             });
         });
         
@@ -86,7 +90,6 @@ define(function (require, exports, module) {
             var data = {
                 cssFile: cssFile,
                 header: header,
-                sourceMap: sourceMap,
                 docs: docs
             };
 
@@ -118,9 +121,8 @@ define(function (require, exports, module) {
                 sourceMapPath = server.urlToPath(sourceMapURL),
                 sourceMapFile = sourceMapPath && FileSystem.getFileForPath(sourceMapPath);
             
-            SourceMapManager.setSourceMapFile(cssFile, sourceMapFile).done(function (sourceMap) {
-                _installSourceDocumentChangeHandlers(cssFile, sourceURL, header, sourceMap);
-            });
+            SourceMapManager.setSourceMapFile(cssFile, sourceMapFile);
+            _installSourceDocumentChangeHandlers(cssFile, sourceURL, header);
         }
     }
     

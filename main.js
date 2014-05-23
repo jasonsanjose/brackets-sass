@@ -40,18 +40,17 @@ define(function (require, exports, module) {
     
     // Return pending promises until preview completes
     $(Compiler).on("sourceMapPreviewStart", function (event, sassFile, cssFile) {
-        // FIXME during CodeInspection, bad cssFile for partials?
         SourceMapManager.setSourceMapPending(cssFile);
     });
     
     // Update source map when preview completes and resolve promise
     $(Compiler).on("sourceMapPreviewEnd", function (event, sassFile, data) {
-        SourceMapManager.setSourceMap(sassFile, data.css, data.sass);
+        SourceMapManager.setSourceMap(data.css.file, data.sourceMap.file, data.sourceMap.contents);
     });
     
     // Reject promise waiting for a source map
-    $(Compiler).on("sourceMapPreviewError", function (event, sassFile, errors) {
-        SourceMapManager.setSourceMap(sassFile);
+    $(Compiler).on("sourceMapPreviewError", function (event, sassFile, cssFile, errors) {
+        SourceMapManager.setSourceMap(cssFile);
     });
     
     // Augment CSSUtils.findMatchingRules to support source maps

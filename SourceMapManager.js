@@ -38,6 +38,7 @@ define(function (require, exports, module) {
     var RE_SOURCE_MAPPING = /\/\*#\s*sourceMappingURL=(.+)\s+\*\//;
     
     function SourceMapManager() {
+        this._sourceMapDeferreds = {};
         this._sourceMaps = {};
         this._dependencyMap = {};
     }
@@ -47,7 +48,7 @@ define(function (require, exports, module) {
      * @param {!File} cssFile
      */
     SourceMapManager.prototype.deleteSourceMap = function (cssFile) {
-        delete this._sourceMaps[cssFile.fullPath];
+        delete this._sourceMapDeferreds[cssFile.fullPath];
     };
     
     /**
@@ -55,14 +56,19 @@ define(function (require, exports, module) {
      * @param {!File} cssFile
      */
     SourceMapManager.prototype.setSourceMapPending = function (cssFile) {
-        var deferred = this._sourceMaps[cssFile.fullPath];
+        var self = this,
+            deferred = this._sourceMapDeferreds[cssFile.fullPath];
         
         // Only create a new promise if the existing one was resolved/rejected
         if (!deferred || (deferred.state() !== "pending")) {
             deferred = new $.Deferred();
         }
+
+        deferred.done(function (sourceMap) {
+            self._sourceMaps[cssFile.fullPath] = sourceMap;
+        });
         
-        this._sourceMaps[cssFile.fullPath] = deferred;
+        this._sourceMapDeferreds[cssFile.fullPath] = deferred;
     };
     
     /**
@@ -71,7 +77,7 @@ define(function (require, exports, module) {
      * @return {!$.Promise}
      */
     SourceMapManager.prototype.getSourceMap = function (cssFile) {
-        return this._sourceMaps[cssFile.fullPath];
+        return this._sourceMapDeferreds[cssFile.fullPath];
     };
     
     /**
@@ -158,7 +164,7 @@ define(function (require, exports, module) {
             // Resolve to a File
             FileSystem.resolve(sourceMapRelPath, function (err, file) {
                 if (err) {
-                    sourceMapFileResult.reject();
+                    sourceMapFileResult.reject(err);
                 } else {
                     sourceMapFileResult.resolve(file);
                 }
@@ -190,7 +196,7 @@ define(function (require, exports, module) {
         this.setSourceMapPending(cssFile);
 
         var self = this,
-            deferred = this._sourceMaps[cssFile.fullPath],
+            deferred = this._sourceMapDeferreds[cssFile.fullPath],
             sourceMap,
             localSources = [],
             error;
@@ -202,9 +208,17 @@ define(function (require, exports, module) {
             error = err;
         }
         
-        // Reject the promise if we fail to parse the source map
         if (!sourceMap) {
-            deferred.reject(error);
+            // Resolve with previous source map if available
+            var prevSourceMap = this._sourceMaps[cssFile.fullPath];
+
+            if (prevSourceMap) {
+                deferred.resolve(prevSourceMap);
+            } else {
+                // Reject the promise if we fail to parse the source map
+                deferred.reject(error);
+            }
+            
             return;
         }
         
