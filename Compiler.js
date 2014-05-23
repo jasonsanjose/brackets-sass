@@ -182,10 +182,11 @@ define(function (require, exports, module) {
     }
     
     function compile(sassFile) {
-        var prefs = _getPreferencesForFile(sassFile);
+        var prefs = _getPreferencesForFile(sassFile),
             cssFile = prefs.outputCSSFile,
-            hasSourceMap = prefs.sourceComments === "map",
-            mapFile = hasSourceMap && prefs.outputSourceMapFile,
+            options = prefs.options,
+            hasSourceMap = options.sourceComments === "map",
+            mapFile = prefs.outputSourceMapFile,
             renderPromise;
         
         if (!prefs) {
@@ -230,7 +231,7 @@ define(function (require, exports, module) {
             inMemoryFiles = _getInMemoryFiles(docs);
         
         if (!prefs) {
-            return;
+            return deferred.reject().promise();
         }
         
         $(exports).triggerHandler("sourceMapPreviewStart", [sassFile, cssFile]);

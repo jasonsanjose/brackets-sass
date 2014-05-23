@@ -40,6 +40,7 @@ define(function (require, exports, module) {
     
     // Return pending promises until preview completes
     $(Compiler).on("sourceMapPreviewStart", function (event, sassFile, cssFile) {
+        // FIXME during CodeInspection, bad cssFile for partials?
         SourceMapManager.setSourceMapPending(cssFile);
     });
     

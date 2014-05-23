@@ -26,7 +26,6 @@ define(function (require, exports, module) {
     "use strict";
     
     var Compiler            = require("Compiler"),
-        SourceMapConsumer   = require("thirdparty/source-map/lib/source-map/source-map-consumer").SourceMapConsumer,
         SourceMapManager    = require("SourceMapManager");
     
     // Load commonly used modules from Brackets
@@ -44,62 +43,6 @@ define(function (require, exports, module) {
     var previewDebounce = _.debounce(function (root, inMemoryFiles) {
         Compiler.preview(root, inMemoryFiles);
     }, 500);
-    
-    function _parseSourceMap(sourceMapURL, sourceMapFile, text) {
-        var parseURL = PathUtils.parseUrl(sourceMapURL);
-
-        var sourceMap = new SourceMapConsumer(text),
-            localSources = [];
-        
-        sourceMap._url = sourceMapURL;
-        sourceMap._mapFile = sourceMapFile;
-
-        sourceMap.sources.forEach(function (source) {
-            // Gather the source document(s) that generated this CSS file
-            localSources.push(FileSystem.getFileForPath(sourceMap._mapFile.parentPath + source));
-        });
-
-        // Swap generated file relative paths with local absolute paths
-        sourceMap._localSources = localSources;
-
-        // If the generated file name is missing, assume the source-map file name and drop the .map extension
-        if (!sourceMap.file) {
-            sourceMap.file = sourceMap._mapFile.name.slice(0, -4);
-        }
-
-        // Set the output document (e.g. cmd line: sass input.scss output.css)
-        sourceMap._outputFile = FileSystem.getFileForPath(sourceMap._mapFile.parentPath + sourceMap.file);
-        
-        return sourceMap;
-    }
-    
-    function _getSourceMap(sourceMapURL) {
-        var sourceMapDeferred = new $.Deferred(),
-            sourceMapPath = server.urlToPath(sourceMapURL),
-            sourceMapFile;
-
-        if (!sourceMapPath) {
-            return sourceMapDeferred.resolve().promise();
-        }
-
-        sourceMapFile = FileSystem.getFileForPath(sourceMapPath);
-
-        FileUtils.readAsText(sourceMapFile).then(function (contents) {
-            sourceMapDeferred.resolve(_parseSourceMap(sourceMapURL, sourceMapFile, contents));
-        }, sourceMapDeferred.reject);
-
-        return sourceMapDeferred.promise();
-    }
-    
-    function _getInMemoryFiles(docs) {
-        var map = {};
-        
-        _.each(docs, function (doc) {
-            map[doc.file.fullPath] = doc.getText();
-        });
-        
-        return map;
-    }
 
     function _setStatus(status, err) {
         // HACK expose LiveDevelopment._setStatus()
@@ -108,12 +51,10 @@ define(function (require, exports, module) {
     }
     
     function _docChangeHandler(data) {
-        var inMemoryFiles = _getInMemoryFiles(data.docs);
-
         // Show out of sync while we wait for SASS to compile
         _setStatus(LiveDevelopment.STATUS_OUT_OF_SYNC);
         
-        Compiler.preview(data.sourceMap._localSources[0], inMemoryFiles).then(function (css, mapText) {
+        Compiler.preview(data.sourceMap._localSources[0], data.docs).then(function (css, mapText) {
             Inspector.CSS.setStyleSheetText(data.header.styleSheetId, css);
             
             // FIXME This will clobber other status (e.g. HTML live preview)
@@ -121,7 +62,7 @@ define(function (require, exports, module) {
             
             // TODO look for added/removed docs?
             // update SourceMap
-            data.sourceMap = _parseSourceMap(data.sourceMap._url, data.sourceMap._mapFile, mapText);
+            data.sourceMap = SourceMapManager.setSourceMap(data.cssFile, null, mapText);
         }, function (err) {
             // TODO show errors in gutter
             console.log(err);
@@ -130,7 +71,7 @@ define(function (require, exports, module) {
         });
     }
     
-    function _installSourceDocumentChangeHandlers(sourceURL, header, sourceMap) {
+    function _installSourceDocumentChangeHandlers(cssFile, sourceURL, header, sourceMap) {
         var docs = [],
             docsPromise;
         
@@ -143,6 +84,7 @@ define(function (require, exports, module) {
         // Install change event handlers for source SCSS/SASS files
         docsPromise.always(function () {
             var data = {
+                cssFile: cssFile,
                 header: header,
                 sourceMap: sourceMap,
                 docs: docs
@@ -176,9 +118,9 @@ define(function (require, exports, module) {
                 sourceMapPath = server.urlToPath(sourceMapURL),
                 sourceMapFile = sourceMapPath && FileSystem.getFileForPath(sourceMapPath);
             
-            if (sourceMapFile) {
-                $(exports).triggerHandler("sourceMapChanged", []);
-            }
+            SourceMapManager.setSourceMapFile(cssFile, sourceMapFile).done(function (sourceMap) {
+                _installSourceDocumentChangeHandlers(cssFile, sourceURL, header, sourceMap);
+            });
         }
     }
     
