@@ -55,6 +55,7 @@ Default: `<filename>.css.map`.
 ### Sample .brackets.json File
 
 ```
+/* REMOVE comments from json file before using this template */
 {
     "path": {
         /* default options */
@@ -65,7 +66,7 @@ Default: `<filename>.css.map`.
                 "includePaths": [],
                 "imagePath": null,
                 "sourceComments": "map",
-                "sourceMap": "bootstrap.css.map"
+                "sourceMap": "bootstrap.css.map",
                 "outputStyle": "nested"
             }
         },
