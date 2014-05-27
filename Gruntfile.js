@@ -94,6 +94,7 @@ module.exports = function (grunt) {
                 options: {
                     archive: "<%= pkg.name %>.zip"
                 },
+                expand: true,
                 cwd: 'dist/',
                 src: ['**/*'],
                 dest: '<%= pkg.name %>'
@@ -104,7 +105,7 @@ module.exports = function (grunt) {
     grunt.registerTask('build', [
         'jshint',
         'requirejs',
-        'copy',
+        'copy:dist',
         'compress'
     ]);
 

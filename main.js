@@ -19,176 +19,188 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
  * DEALINGS IN THE SOFTWARE.
  */
-/*jslint nomen:true, vars:true*/
+/*jslint nomen:true, vars:true, regexp:true*/
 /*global window, console, define, brackets, $, Mustache*/
 
 define(function (require, exports, module) {
     "use strict";
     
-    require("SASSAgent");
+    var Compiler            = require("Compiler"),
+        NestedStyleParser   = require("NestedStyleParser"),
+        SASSAgent           = require("SASSAgent"),
+        SourceMapManager    = require("SourceMapManager");
     
-    // Load commonly used modules from Brackets
     var _                   = brackets.getModule("thirdparty/lodash"),
         AppInit             = brackets.getModule("utils/AppInit"),
+        Async               = brackets.getModule("utils/Async"),
+        CSSUtils            = brackets.getModule("language/CSSUtils"),
+        CodeInspection      = brackets.getModule("language/CodeInspection"),
         DocumentManager     = brackets.getModule("document/DocumentManager"),
-        ExtensionUtils      = brackets.getModule("utils/ExtensionUtils"),
-        FileUtils           = brackets.getModule("file/FileUtils"),
-        FileSystem          = brackets.getModule("filesystem/FileSystem"),
-        PreferencesManager  = brackets.getModule("preferences/PreferencesManager"),
-        NodeDomain          = brackets.getModule("utils/NodeDomain");
+        FileSystem          = brackets.getModule("filesystem/FileSystem");
     
-    // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
-        _nodeDomain = new NodeDomain("sass", _domainPath);
+    // Return pending promises until preview completes
+    $(Compiler).on("sourceMapPreviewStart", function (event, sassFile, cssFile) {
+        SourceMapManager.setSourceMapPending(cssFile);
+    });
     
-    var FILE_EXT_RE     = /\.(sass|scss)$/,
-        PREF_ENABLED    = "enabled",
-        PREF_OPTIONS    = "options";
+    // Update source map when preview completes and resolve promise
+    $(Compiler).on("sourceMapPreviewEnd", function (event, sassFile, data) {
+        SourceMapManager.setSourceMap(data.css.file, data.sourceMap.file, data.sourceMap.contents);
+    });
+    
+    // Reject promise waiting for a source map
+    $(Compiler).on("sourceMapPreviewError", function (event, sassFile, cssFile, errors) {
+        SourceMapManager.setSourceMap(cssFile);
+    });
+    
+    // Augment CSSUtils.findMatchingRules to support source maps
+    var baseFindMatchingRules = CSSUtils.findMatchingRules;
+    
+    function _convertMatchingRuleResult(selectorCache, generatedResult) {
+        // Check CSS text for a sourceMappingURL
+        var oneResult = new $.Deferred(),
+            cssFile = generatedResult.document.file,
+            sourceMapPromise = SourceMapManager.getSourceMap(cssFile),
+            match = !sourceMapPromise && SourceMapManager.getSourceMappingURL(generatedResult.document.getText());
+        
+        if (match) {
+            sourceMapPromise = SourceMapManager.setSourceMapFile(cssFile, match);
+        }
 
-    var extensionPrefs = PreferencesManager.getExtensionPrefs("sass");
+        if (sourceMapPromise) {
+            sourceMapPromise.then(function (sourceMap) {
+                // TODO core brackets change to add selectorInfo 
+                // generatedPos = { line: info.selectorStartLine + 1, column: info.selectorStartChar },
+                var info = generatedResult.selectorInfo,
+                    generatedPos = { line: generatedResult.lineStart + 1, column: 0 },
+                    origPos = sourceMap.originalPositionFor(generatedPos),
+                    newResult;
+                
+                SourceMapManager.getSourceDocument(cssFile, origPos.source).then(function (doc) {
+                    var selectors = selectorCache[doc.file.fullPath],
+                        selector,
+                        origLine = origPos.line - 1;
+
+                    // HACK? Use CSSUtils to parse SASS selectors
+                    if (!selectors) {
+                        selectors = NestedStyleParser.extractAllSelectors(doc.getText());
+                        selectorCache[doc.file.fullPath] = selectors;
+                    }
+
+                    // Find the original SASS selector based on the sourceMap position
+                    for (var i = 0; i < selectors.length; i++) {
+                        selector = selectors[i];
+
+                        if ((origLine >= selector.ruleStartLine) && (origLine <= selector.selectorEndLine)) {
+                            break;
+                        } else if (origLine < selector.ruleStartLine) {
+                            // HACK We may skip over the actual rule/mixin due to our limited SASS parsing
+                            break;
+                        }
+                    }
+
+                    if (selector) {
+                        // CSSUtils can't handle single line '//' comments
+                        var name = selector.selector.replace("//.*\n", "");
+                        
+                        newResult = {
+                            name: name,
+                            document: doc,
+                            lineStart: selector.ruleStartLine,
+                            lineEnd: selector.declListEndLine,
+                            selectorGroup: selector.selectorGroup
+                        };
+                    }
+
+                    // Overwrite original result
+                    if (newResult) {
+                        oneResult.resolve(newResult);
+                    } else {
+                        oneResult.reject();
+                    }
+                }, oneResult.reject);
+            }, function () {
+                // Source map error, use the original result
+                oneResult.reject();
+            });
+        } else {
+            // No source map for this result
+            oneResult.reject();
+        }
+
+        return oneResult.promise();
+    }
     
-    function _render(path, options) {
-        var deferred = new $.Deferred();
+    /**
+     * Replace matched CSS rules with SASS rules
+     */
+    function findMatchingRules(selector, htmlDocument) {
+        var basePromise = baseFindMatchingRules(selector, htmlDocument),
+            deferred = new $.Deferred(),
+            newResults = [],
+            selectorCache = {};
         
-        var renderPromise = _nodeDomain.exec("render",
-                 path,
-                 options.includePaths,
-                 options.imagePath,
-                 options.outputStyle,
-                 options.sourceComments,
-                 options.sourceMap);
-        
-        renderPromise.then(function (response) {
-            deferred.resolve(response.css, response.map);
+        // Check CSS file results for an associated source map
+        basePromise.then(function (resultSelectors) {
+            var parallelPromise = Async.doInParallel(resultSelectors, function (resultSelector, index) {
+                var onePromise = _convertMatchingRuleResult(selectorCache, resultSelector);
+                
+                onePromise.then(function (newResult) {
+                    // Use new SASS results
+                    newResults[index] = newResult;
+                }, function () {
+                    // Use original result
+                    newResults[index] = resultSelector;
+                });
+                
+                return onePromise;
+            });
+            
+            parallelPromise.always(function () {
+                deferred.resolve(newResults);
+            });
         }, deferred.reject);
         
         return deferred.promise();
     }
-
-    function _getPreferencesForFile(file) {
-        var isSASSFile = file.isFile && file.name.match(FILE_EXT_RE);
-
-        if (!isSASSFile) {
-            return;
-        }
-
-        // TODO (issue 7442): path-scoped preferences in extensions
-        var prefs = PreferencesManager, /* extensionPrefs */
-            enabled = prefs.get("sass." + PREF_ENABLED, file.fullPath),
-            options = (enabled && prefs.get("sass." + PREF_OPTIONS, file.fullPath)),
-            outputName = (options && options.output) || file.name.replace(FILE_EXT_RE, ".css"),
-            outputFile;
-
-        if (!enabled) {
-            return false;
-        }
-
-        if (outputName) {
-            // TODO relative paths in output?
-            outputFile = FileSystem.getFileForPath(file.parentPath + outputName);
-        }
-
-        options = _.defaults(options || {}, {
-            includePaths: [],
-            outputStyle: "nested",
-            sourceComments: "map",
-            sourceMap: outputFile.fullPath + ".map"
-        });
-        
-        return {
-            outputFile: outputFile,
-            options: options
-        };
-    }
     
-    function compile(file) {
-        var prefs = _getPreferencesForFile(file),
-            renderPromise;
-        
-        if (!prefs) {
-            return;
-        }
-        
-        renderPromise = _render(file.fullPath, prefs.options);
-        
-        return renderPromise.then(function (css, map) {
-            FileUtils.writeText(prefs.outputFile, css, true);
-            
-            if (map) {
-                // TODO relative paths in sourceMap?
-                var mapFile = FileSystem.getFileForPath(prefs.options.sourceMap);
-                FileUtils.writeText(mapFile, map, true);
-            }
-        }, function (err) {
-            // TODO display errors in panel?
-            console.error(err);
-        });
-    }
+    CSSUtils.findMatchingRules = findMatchingRules;
     
-    function preview(file, inMemoryFiles) {
-        var deferred = new $.Deferred(),
-            prefs = _getPreferencesForFile(file),
-            options = prefs.options,
-            previewPromise;
+    /**
+     * @private
+     * CodeInspection callback to provider SASS errors
+     * @param {!string} text
+     * @param {!path} path
+     */
+    function _scanFileAsync(text, path) {
+        var promise = Compiler.getErrors(path);
         
-        if (!prefs) {
-            return;
+        // If the promise is resolved, errors were cached when the file was
+        // compiled as a partial.
+        if (promise.state() === "pending") {
+            // FIXME How to avoid calling preview() followed by compile()?
+            // CodeInspection runs first firing _scanFileAsync. For now,
+            // we just won't show errors when switching to a file that is not dirty
+            var sassFile = FileSystem.getFileForPath(path);
+
+            // FIXME compile input SASS file (i.e. not partials) with in-memory document content
+            // var inMemoryDocsPromise = SourceMapManager.getSourceDocuments(sassFile);
+            // inMemoryDocsPromise.then(function (docs) {
+            var docs = [DocumentManager.getOpenDocumentForPath(path)];
+            Compiler.preview(sassFile, docs);
+            //});
         }
         
-        previewPromise = _nodeDomain.exec("preview",
-            file.fullPath,
-            inMemoryFiles,
-            options.includePaths,
-            options.imagePath,
-            options.outputStyle,
-            options.sourceComments,
-            options.sourceMap);
-        
-        previewPromise.then(function (response) {
-            deferred.resolve(response.css, response.map);
-        }, function (err) {
-            deferred.reject(err);
-        });
-        
-        return deferred.promise();
-    }
-
-    function deleteTempFiles() {
-        return _nodeDomain.exec("deleteTempFiles");
-    }
-    
-    function _fileSystemChange(event, entry, added, removed) {
-        if (!entry || !entry.isFile) {
-            return;
-        }
-        
-        compile(entry);
-    }
-
-    function _prefChangeHandler(event) {
-        // TODO compile all files?
-        // _compileWithPreferences();
+        return promise;
     }
     
     function _appReady() {
-        // All sass/scss files get compiled when changed on disk
-        // TODO preferences to compile on demand, filter for file paths, etc.?
-        FileSystem.on("change", _fileSystemChange);
+        CodeInspection.register("scss", {
+            name: "SCSS",
+            scanFileAsync: _scanFileAsync
+        });
     }
-
-    // FIXME why is change fired during app init?
-    // Register preferences
-    extensionPrefs.definePreference(PREF_ENABLED, "boolean", true)
-        .on("change", _prefChangeHandler);
-    
-    extensionPrefs.definePreference(PREF_OPTIONS, "object")
-        .on("change", _prefChangeHandler);
     
     // Delay initialization until `appReady` event is fired
     AppInit.appReady(_appReady);
-    
-    // Public API
-    exports.compile = compile;
-    exports.preview = preview;
-    exports.deleteTempFiles = deleteTempFiles;
 });

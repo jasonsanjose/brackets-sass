@@ -42,7 +42,7 @@ Default: `null`
 Default: `nested`
 
 #### sourceComments
-`sourceComments` is a `String` to determine what debug information is included in the output file. Its value should be one of `'none', 'normal', 'map'`. The default is `'none'`.
+`sourceComments` is a `String` to determine what debug information is included in the output file. Its value should be one of `'none', 'normal', 'map'`. The default is `'map'`.
 The `map` option will create the source map file in your CSS destination.
 [Important: `souceComments` is only supported when using the `file` option, and does nothing when using `data` flag.]
 Default: `map`
