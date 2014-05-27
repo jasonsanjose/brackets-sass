@@ -74,10 +74,8 @@ define(function (require, exports, module) {
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputFile;
 
-        if (outputName) {
-            // TODO relative paths in output?
-            outputFile = FileSystem.getFileForPath(file.parentPath + outputName);
-        }
+        // TODO relative paths in output?
+        outputFile = FileSystem.getFileForPath(file.parentPath + outputName);
 
         options = _.defaults(options || {}, {
             includePaths: [],
@@ -90,7 +88,7 @@ define(function (require, exports, module) {
             enabled: enabled,
             options: options,
             outputCSSFile: outputFile,
-            outputSourceMapFile: options.sourceMap && FileSystem.getFileForPath(options.sourceMap)
+            outputSourceMapFile: options.sourceMap && FileSystem.getFileForPath(outputFile.parentPath + options.sourceMap)
         };
     }
     
