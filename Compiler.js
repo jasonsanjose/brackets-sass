@@ -39,7 +39,8 @@ define(function (require, exports, module) {
     var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
-    var RE_FILE_EXT     = /^[^_].*\.scss$/, /* Add .sass later... /^[^_].*\.(sass|scss)$/ */
+    var RE_FILE         = /^[^_].*\.scss$/, /* Add .sass later...*/
+        RE_FILE_EXT     = /\.(sass|scss)$/,
         PREF_ENABLED    = "enabled",
         PREF_OPTIONS    = "options";
 
@@ -270,7 +271,8 @@ define(function (require, exports, module) {
     }
     
     function _fileSystemChange(event, entry, added, removed) {
-        if (!entry || !entry.isFile || !entry.name.match(RE_FILE_EXT)) {
+        // Skip directories and SASS partials, e.g. _variables.scss
+        if (!entry || !entry.isFile || !entry.name.match(RE_FILE)) {
             return;
         }
         
