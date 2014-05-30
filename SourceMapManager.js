@@ -231,13 +231,16 @@ define(function (require, exports, module) {
         sourceMap.sources.forEach(function (source) {
             // Gather the source document(s) that generated this CSS file
             var localSourceFile = FileSystem.getFileForPath(parentPath + source),
-                dependencies = self._dependencyMap[localSourceFile.fullPath] || [];
+                dependencies = self._dependencyMap[localSourceFile.fullPath] || {};
             
             localSources.push(localSourceFile);
             
             // Map each source as a dependency for the input cssFile
             self._dependencyMap[localSourceFile.fullPath] = dependencies;
-            self._dependencyMap[localSourceFile.fullPath].push(cssFile);
+            self._dependencyMap[localSourceFile.fullPath][cssFile.fullPath] = {
+                cssFile: cssFile,
+                sourceMap: sourceMap
+            };
         });
         
         // Set input SASS document
@@ -260,11 +263,12 @@ define(function (require, exports, module) {
     };
     
     /**
-     *
-     * @param {!File} cssFile
+     * 
+     * @param {!File} sassFile
+     * @return {Object.<string,{{cssFile: File, sourceMap: SourceMapConsumer}}>}
      */
-    SourceMapManager.prototype.getUsageForFile = function (cssFile) {
-        return this._dependencyMap[cssFile.fullPath] || [];
+    SourceMapManager.prototype.getUsageForFile = function (sassFile) {
+        return this._dependencyMap[sassFile.fullPath] || {};
     };
     
     return new SourceMapManager();
