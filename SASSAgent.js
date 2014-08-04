@@ -57,7 +57,7 @@ define(function (require, exports, module) {
         var sourceMapPromise = SourceMapManager.getSourceMap(data.cssFile);
 
         sourceMapPromise.then(function (sourceMap) {
-            return Compiler.preview(sourceMap._localSources[0], data.docs).then(function (css) {
+            return Compiler.preview(sourceMap.sassFile, data.docs).then(function (css) {
                 Inspector.CSS.setStyleSheetText(data.header.styleSheetId, css);
                 
                 // TODO look for added/removed docs?

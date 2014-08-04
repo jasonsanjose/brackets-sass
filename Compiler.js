@@ -39,8 +39,7 @@ define(function (require, exports, module) {
     var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
-    var RE_FILE         = /^[^_].*\.scss$/, /* Add .sass later...*/
-        RE_FILE_EXT     = /\.(sass|scss)$/,
+    var RE_FILE_EXT     = /\.(sass|scss)$/,
         PREF_ENABLED    = "enabled",
         PREF_OPTIONS    = "options";
 
@@ -78,17 +77,19 @@ define(function (require, exports, module) {
         outputFile = FileSystem.getFileForPath(file.parentPath + outputName);
 
         options = _.defaults(options || {}, {
-            includePaths: [],
             outputStyle: "nested",
             sourceComments: "map",
-            sourceMap: outputFile.fullPath + ".map"
+            sourceMap: outputFile.name + ".map"
         });
+
+        // Initialize sourceMap with full path
+        options.sourceMap = outputFile.parentPath + options.sourceMap;
         
         return {
             enabled: enabled,
             options: options,
             outputCSSFile: outputFile,
-            outputSourceMapFile: options.sourceMap && FileSystem.getFileForPath(outputFile.parentPath + options.sourceMap)
+            outputSourceMapFile: FileSystem.getFileForPath(options.sourceMap)
         };
     }
     
@@ -267,24 +268,11 @@ define(function (require, exports, module) {
     function deleteTempFiles() {
         return _nodeDomain.exec("deleteTempFiles");
     }
-    
-    function _fileSystemChange(event, entry, added, removed) {
-        // Skip directories and SASS partials, e.g. _variables.scss
-        if (!entry || !entry.isFile || !entry.name.match(RE_FILE)) {
-            return;
-        }
-        
-        compile(entry);
-    }
 
     function _prefChangeHandler(event) {
         // TODO compile all files?
         // _compileWithPreferences();
     }
-    
-    // All SASS files get compiled when changed on disk
-    // TODO preferences to compile on demand, filter for file paths, etc.?
-    FileSystem.on("change", _fileSystemChange);
         
     // FIXME why is change fired during app init?
     // Register preferences
