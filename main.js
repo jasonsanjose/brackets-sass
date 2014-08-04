@@ -281,6 +281,11 @@ define(function (require, exports, module) {
     FileSystem.on("change", function (event, entry, added, removed) {
         var filesToCompile = [];
 
+        // Clear caches
+        removed.forEach(function (removedFile) {
+            SourceMapManager.deleteFile(removedFile);
+        });
+
         // Skip directories
         if (!entry || !entry.isFile) {
             return;

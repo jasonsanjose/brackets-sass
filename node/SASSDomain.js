@@ -148,6 +148,10 @@ function deleteTempFiles() {
     tmpFolders = [];
 }
 
+function mkdirp(path, callback) {
+    fsextra.mkdirp(path, callback);
+}
+
 /**
  * Initialize the "childProcess" domain.
  * The fileWatcher domain handles watching and un-watching directories.
@@ -198,6 +202,17 @@ function init(domainManager) {
         false,
         "Delete temporary files used for Live Preview",
         []
+    );
+    
+    domainManager.registerCommand(
+        "sass",
+        "mkdirp",
+        mkdirp,
+        true,
+        "Creates a directory. If the parent hierarchy doesn't exist, it's created. Like mkdir -p.",
+        [
+            {name: "path", type: "string"}
+        ]
     );
     
     _domainManager = domainManager;
