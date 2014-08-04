@@ -201,22 +201,30 @@ define(function (require, exports, module) {
                     }
                 };
             
-            FileUtils.writeText(cssFile, css, true);
+            _mkdirp(cssFile.parentPath).done(function () {
+                FileUtils.writeText(cssFile, css, true);
+            });
             
             if (map) {
-                // TODO relative paths in sourceMap?
-                FileUtils.writeText(mapFile, map, true);
+                _mkdirp(mapFile.parentPath).done(function () {
+                    // TODO relative paths in sourceMap?
+                    FileUtils.writeText(mapFile, map, true);
                 
-                eventData.sourceMap = {
-                    file: mapFile,
-                    contents: map
-                };
+                    eventData.sourceMap = {
+                        file: mapFile,
+                        contents: map
+                    };
+                });
             }
             
             _finishScan(sassFile);
         }, function (errors) {
             _finishScan(sassFile, errors);
         });
+    }
+    
+    function _mkdirp(path) {
+        return _nodeDomain.exec("mkdirp", path);
     }
     
     function preview(sassFile, docs) {

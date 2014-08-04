@@ -45,10 +45,12 @@ define(function (require, exports, module) {
     
     /**
      *
-     * @param {!File} cssFile
+     * @param {!File} file
      */
-    SourceMapManager.prototype.deleteSourceMap = function (cssFile) {
-        delete this._sourceMapDeferreds[cssFile.fullPath];
+    SourceMapManager.prototype.deleteFile = function (file) {
+        delete this._sourceMapDeferreds[file.fullPath];
+        delete this._sourceMaps[file.fullPath];
+        delete this._dependencyMap[file.fullPath];
     };
     
     /**
