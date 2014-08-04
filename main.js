@@ -282,9 +282,11 @@ define(function (require, exports, module) {
         var filesToCompile = [];
 
         // Clear caches
-        removed.forEach(function (removedFile) {
-            SourceMapManager.deleteFile(removedFile);
-        });
+        if (removed) {
+            removed.forEach(function (removedFile) {
+                SourceMapManager.deleteFile(removedFile);
+            });
+        }
 
         // Skip directories
         if (!entry || !entry.isFile) {
