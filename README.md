@@ -3,14 +3,19 @@ brackets-sass
 
 Compiles *.scss files when changed. Updates *.scss files during Live Preview.
 
+## Features
+
+* Compiles `*.scss` files when changed and when any `@import` dependency is changed
+* Generates source maps
+* Show SASS compiler errors
+* Update CSS in Brackets' Live Preview 
+
 ## Future Plans
 
 * Compile keyboard shortcut (instead of waiting for file changes)
-* Compile when `@import` dependencies are updated
 * Selector highlighting
 * Swap `libsass` for Ruby `sass` compiler implementation
     * .sass indented syntax support
-* Error highlighting
 
 ## Preferences
 
@@ -49,12 +54,23 @@ Default: `map`
 
 #### sourceMap
 If your `sourceComments` option is set to `map`, `sourceMap` allows setting a new path context for the referenced Sass files.
-The source map describes a path from your CSS file location, into the the folder where the Sass files are located. In most occasions this will work out-of-the-box but, in some cases, you may need to set a different output.
+The source map describes a path relative to your your `output` CSS file location. In most occasions this will work out-of-the-box but, in some cases, you may need to set a different output.
 Default: `<filename>.css.map`.
 
 ### Sample .brackets.json File
 
 ```
+/*
+Resulting file tree will appear as follows:
++ css
+|--- bootstrap.css
+|--- bootstrap.css.map
++ sass
+|--- bootstrap.scss
+|--+ bootstap
+|  |--- somefiles.scss
+*/
+
 /* REMOVE comments from json file before using this template */
 {
     "path": {
@@ -62,7 +78,7 @@ Default: `<filename>.css.map`.
         "sass/bootstrap.scss": {
             "sass.enabled": true,
             "sass.options": {
-                "output": "bootstrap.css",
+                "output": "../css/bootstrap.css",
                 "includePaths": [],
                 "imagePath": null,
                 "sourceComments": "map",
