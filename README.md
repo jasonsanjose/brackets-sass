@@ -67,7 +67,7 @@ Resulting file tree will appear as follows:
 |--- bootstrap.css.map
 + sass
 |--- bootstrap.scss
-|--+ bootstap
+|--+ bootstrap
 |  |--- somefiles.scss
 */
 
