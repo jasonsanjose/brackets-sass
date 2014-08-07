@@ -24,8 +24,8 @@
 module.exports = function (grunt) {
     'use strict';
 
-    // Load dependencies
-    require('load-grunt-tasks')(grunt, {pattern: ['grunt-contrib-*']});
+    // load dependencies
+    require("load-grunt-tasks")(grunt);
     
     grunt.initConfig({
         pkg: grunt.file.readJSON("package.json"),
@@ -92,7 +92,7 @@ module.exports = function (grunt) {
         compress: {
             dist: {
                 options: {
-                    archive: "<%= pkg.name %>.zip"
+                    archive: "<%= pkg.name %>.<%= pkg.version %>.zip"
                 },
                 expand: true,
                 cwd: 'dist/',
@@ -102,16 +102,36 @@ module.exports = function (grunt) {
         }
     });
 
+    grunt.registerTask("build-version", function () {
+        grunt.task.requires("gitinfo");
+
+        var packageJSON = grunt.config("pkg"),
+            version = packageJSON.version,
+            gitinfo = grunt.config("gitinfo");
+
+        // Add SHA
+        version = version + "+sha." + gitinfo.local.branch.current.shortSHA;
+
+        packageJSON.version = version;
+        grunt.config("pkg", packageJSON);
+
+        grunt.file.write("dist/package.json", JSON.stringify(packageJSON, null, "  "));
+    });
+
     grunt.registerTask('build', [
         'jshint',
         'requirejs',
         'copy:dist',
+        'gitinfo',
+        'build-version',
         'compress'
     ]);
 
     grunt.registerTask('debug', [
         'clean',
         'copy:debug',
+        'gitinfo',
+        'build-version',
         'compress'
     ]);
 

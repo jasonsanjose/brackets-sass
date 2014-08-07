@@ -40,7 +40,9 @@ define(function (require, exports, module) {
         FileSystem          = brackets.getModule("filesystem/FileSystem"),
         ProjectManager      = brackets.getModule("project/ProjectManager");
 
-    var RE_FILE = /^[^_].*\.scss$/;
+    // Distinguish input SASS files from partials
+    var RE_INPUT_FILE = /^[^_].*\.(scss|sass)$/,
+        RE_PARTIAL_FILE = /^_.*\.(scss|sass)$/;
     
     // Augment CSSUtils.findMatchingRules to support source maps
     var baseFindMatchingRules = CSSUtils.findMatchingRules;
@@ -66,14 +68,24 @@ define(function (require, exports, module) {
                     newResult;
                 
                 SourceMapManager.getSourceDocument(cssFile, origPos.source).then(function (doc) {
-                    var selectors = selectorCache[doc.file.fullPath],
+                    var fullPath = doc.file.fullPath,
+                        selectors = selectorCache[fullPath],
+                        fileExt = FileUtils.getFileExtension(fullPath),
+                        docText = doc.getText(),
                         selector,
                         origLine = origPos.line - 1,
                         i;
 
-                    // HACK? Use CSSUtils to parse SASS selectors
+                    // HACK? Use CSSUtils to parse SCSS selectors
                     if (!selectors) {
-                        selectors = NestedStyleParser.extractAllSelectors(doc.getText());
+                        if (fileExt === "scss") {
+                            selectors = NestedStyleParser.extractAllSelectors(docText);
+                        } else {
+                            // TODO support SASS
+                            // selectors = IndentedStyleParser.extractAllSelectors(docText);
+                            selectors = [];
+                        }
+
                         selectorCache[doc.file.fullPath] = selectors;
                     }
 
@@ -241,6 +253,32 @@ define(function (require, exports, module) {
             });
         });
     }
+
+    function _isSassFile(entry, regexp) {
+        var isFile = entry && entry.isFile && entry.name.match(regexp);
+
+        return isFile && ProjectManager.isWithinProject(entry);
+    }
+
+    function _isSassFileInput(entry) {
+        return _isSassFile(entry, RE_INPUT_FILE);
+    }
+
+    function _isSassFilePartial(entry) {
+        return _isSassFile(entry, RE_PARTIAL_FILE);
+    }
+
+    // Check if this file is referenced in one or more source maps
+    function _getUsageForFile(sassFile) {
+        var usages = SourceMapManager.getUsageForFile(sassFile),
+            inputFiles = [];
+
+        _.each(usages, function (usage) {
+            inputFiles.push(usage.sourceMap.sassFile);
+        });
+
+        return inputFiles;
+    }
     
     function _appReady() {
         CodeInspection.register("scss", {
@@ -248,7 +286,10 @@ define(function (require, exports, module) {
             scanFileAsync: _scanFileAsync
         });
 
-        _scanForSourceMaps();
+        CodeInspection.register("sass", {
+            name: "SASS",
+            scanFileAsync: _scanFileAsync
+        });
     }
 
     $(ProjectManager).on("projectOpen", function (event, root) {
@@ -260,53 +301,71 @@ define(function (require, exports, module) {
     
     // Return pending promises until preview completes
     $(Compiler).on("sourceMapPreviewStart", function (event, sassFile, cssFile) {
-        // TODO ignore partials
-        SourceMapManager.setSourceMapPending(cssFile);
+        if (_isSassFileInput(sassFile)) {
+            SourceMapManager.setSourceMapPending(cssFile);
+        }
     });
     
     // Update source map when preview completes and resolve promise
     $(Compiler).on("sourceMapPreviewEnd", function (event, sassFile, data) {
-        // TODO ignore partials
-        SourceMapManager.setSourceMap(data.css.file, data.sourceMap.file, data.sourceMap.contents);
+        if (_isSassFileInput(sassFile)) {
+            SourceMapManager.setSourceMap(data.css.file, data.sourceMap.file, data.sourceMap.contents);
+        }
     });
     
     // Reject promise waiting for a source map
     $(Compiler).on("sourceMapPreviewError", function (event, sassFile, cssFile, errors) {
-        // TODO ignore partials
-        SourceMapManager.setSourceMap(cssFile);
+        if (_isSassFileInput(sassFile)) {
+            SourceMapManager.setSourceMap(cssFile);
+        }
     });
     
     // All SASS files get compiled when changed on disk
     // TODO preferences to compile on demand, filter for file paths, etc.?
     FileSystem.on("change", function (event, entry, added, removed) {
-        var filesToCompile = [];
+        var filesToCompile = [],
+            findUsage = [];
 
-        // Clear caches
+        if (entry) {
+            if (_isSassFileInput(entry)) {
+                // Compile a changed input file
+                filesToCompile.push(entry);
+            } else if (_isSassFilePartial(entry)) {
+                // Check for usage of a partial file
+                findUsage.push(entry);
+            }
+        }
+
         if (removed) {
             removed.forEach(function (removedFile) {
+                // Find usages of partial files
+                if (_isSassFilePartial(removedFile)) {
+                    findUsage.push(removedFile);
+                }
+
+                // Clear caches
                 SourceMapManager.deleteFile(removedFile);
             });
         }
 
-        // Skip directories
-        if (!entry || !entry.isFile) {
-            return;
+        // Compile new input files (but not partials)
+        if (added) {
+            added.forEach(function (addedFile) {
+                if (_isSassFileInput(addedFile)) {
+                    filesToCompile.push(addedFile);
+                }
+            });
         }
 
-        // Check if this file is referenced in one or more source maps
-        var usages = SourceMapManager.getUsageForFile(entry),
-            cssFilePaths = Object.keys(usages);
-
-        cssFilePaths.forEach(function (cssFilePath) {
-            filesToCompile.push(usages[cssFilePath].sourceMap.sassFile);
+        // Add input files that reference deleted/changed files
+        findUsage.forEach(function (sassFile) {
+            filesToCompile = filesToCompile.concat(_getUsageForFile(sassFile));
         });
-
-        // Compile a SASS file that does not have a source map
-        if (filesToCompile.length === 0 && entry.name.match(RE_FILE)) {
-            filesToCompile.push(entry);
-        }
         
-        filesToCompile.forEach(Compiler.compile);
+        // Re-compile
+        _.each(_.uniq(filesToCompile), function (entry) {
+            Compiler.compile(entry);
+        });
     });
     
     // Delay initialization until `appReady` event is fired

@@ -26,7 +26,8 @@
 
 "use strict";
 
-var fs = require("fs"),
+var cp = require("child_process"),
+    fs = require("fs"),
     fsextra = require("fs-extra"),
     os = require("os"),
     path = require("path"),
@@ -48,35 +49,68 @@ function tmpdir() {
     return baseTmpDir + "brackets-sass";
 }
 
-function parseError(error) {
-    var match = error.match(RE_ERROR);
+function parseError(error, file) {
+    var match = error.match(RE_ERROR),
+        details;
     
     if (!match) {
-        return error;
+        details = {
+            errorString: error,
+            path: file,
+            pos: { line: 1, ch: 0 },
+            message: error
+        };
+    } else {
+        details = {
+            errorString: error,
+            path: match[1],
+            pos: { line: parseInt(match[3], 10) - 1, ch: 0 },
+            message: match[4] && match[4].trim()
+        };
     }
 
-    return {
-        errorString: error,
-        path: match[1],
-        pos: { line: parseInt(match[3], 10) - 1, ch: 0 },
-        message: match[4] && match[4].trim()
-    };
+    return [details];
 }
 
 function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
-    sass.render({
+    var child = cp.fork(__dirname + "/render");
+
+    child.on("message", function (message) {
+        if (message.css) {
+            callback(null, { css: message.css, map: message.map });
+        } else if (message.error) {
+            callback(parseError(message.error, file));
+        }/* else if (message.exitcode) {
+            console.log("exitcode: " + message.exitcode);
+        }*/
+    });
+
+    child.on("error", function (err) {
+        callback(err);
+    });
+
+    child.on("exit", function (code, signal) {
+        if (code === null) {
+            var errString = "Fatal node-sass error, signal=" + signal;
+
+            callback([{
+                errorString: errString,
+                path: file,
+                pos: { ch: 0 },
+                message: errString
+            }]);
+        }/* else {
+            console.log("normal exit code: " + code);
+        }*/
+    });
+
+    child.send({
         file: file,
         includePaths: includePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
         sourceComments: sourceComments,
-        sourceMap: sourceMap,
-        success: function (css, map) {
-            callback(null, { css: css, map: map });
-        },
-        error: function (error) {
-            callback([parseError(error)]);
-        }
+        sourceMap: sourceMap
     });
 }
 
