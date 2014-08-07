@@ -40,8 +40,8 @@ define(function (require, exports, module) {
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
     var RE_FILE_EXT     = /\.(sass|scss)$/,
-        PREF_ENABLED    = "enabled",
-        PREF_OPTIONS    = "options";
+        PREF_ENABLED    = "sass.enabled",
+        PREF_OPTIONS    = "sass.options";
 
     var extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
         scannedFileMap = {},
@@ -66,10 +66,9 @@ define(function (require, exports, module) {
     }
 
     function _getPreferencesForFile(file) {
-        // TODO (issue 7442): path-scoped preferences in extensions
-        var prefs = PreferencesManager, /* extensionPrefs */
-            enabled = prefs.get("sass." + PREF_ENABLED, file.fullPath),
-            options = prefs.get("sass." + PREF_OPTIONS, file.fullPath),
+        var prefs = extensionPrefs,
+            enabled = prefs.get(PREF_ENABLED, file.fullPath),
+            options = prefs.get(PREF_OPTIONS, file.fullPath),
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputFile;
 
@@ -130,6 +129,7 @@ define(function (require, exports, module) {
     
     function _finishScan(file, errors) {
         var path = file.fullPath,
+            sassFileExtension = FileUtils.getFileExtension(path),
             scanDeferred = _deferredForScannedPath(path);
 
         // Clear cached errors
@@ -150,8 +150,9 @@ define(function (require, exports, module) {
                 var clonedError = _.clone(err);
                 clonedError.pos = _.clone(err.pos);
 
+                // FIXME determine when to add underscore prefix to partials
                 // HACK libsass errors on partials don't include the file extension!
-                clonedError.path += ".scss";
+                clonedError.path += sassFileExtension;
 
                 partialErrorMap[clonedError.path] = partialErrorMap[clonedError.path] || [];
                 partialErrorMap[clonedError.path].push(clonedError);
@@ -176,6 +177,10 @@ define(function (require, exports, module) {
                 aborted: false
             });
         });
+    }
+    
+    function _mkdirp(path) {
+        return _nodeDomain.exec("mkdirp", path);
     }
     
     function compile(sassFile) {
@@ -221,10 +226,6 @@ define(function (require, exports, module) {
         }, function (errors) {
             _finishScan(sassFile, errors);
         });
-    }
-    
-    function _mkdirp(path) {
-        return _nodeDomain.exec("mkdirp", path);
     }
     
     function preview(sassFile, docs) {
@@ -282,7 +283,6 @@ define(function (require, exports, module) {
         // _compileWithPreferences();
     }
         
-    // FIXME why is change fired during app init?
     // Register preferences
     extensionPrefs.definePreference(PREF_ENABLED, "boolean", true)
         .on("change", _prefChangeHandler);

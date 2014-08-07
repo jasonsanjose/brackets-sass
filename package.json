@@ -3,13 +3,17 @@
   "title": "Brackets SASS",
   "homepage": "https://github.com/jasonsanjose/brackets-sass",
   "author": "Jason San Jose (https://github.com/jasonsanjose)",
+  "repository": {
+    "type" : "git",
+    "url" : "http://github.com/jasonsanjose/brackets-sass.git"
+  },
   "license": "MIT",
-  "version": "0.3.1-0",
+  "version": "0.4.0",
   "engines": {
     "brackets": ">=0.38"
   },
   "description": "Compiles SASS *.scss files when changed. Updates *.scss files during Live Preview.",
-  "keywords": ["sass", "scss", "live", "preview", "compile", "preprocess", "preprocessor"],
+  "keywords": ["sass", "scss", "live", "preview", "compile", "compiler", "preprocess", "preprocessor", "libsass", "node-sass"],
   "devDependencies": {
     "grunt": "0.4.1",
     "grunt-cli": "0.1.9",
@@ -19,9 +23,7 @@
     "grunt-contrib-requirejs": "0.4.1",
     "load-grunt-tasks": "0.2.0",
     "grunt-contrib-compress": "0.7.0",
+    "grunt-gitinfo": "0.1.4",
     "jshint": "2.1.4"
-  },
-  "scripts": {
-    "install": "grunt"
   }
 }
