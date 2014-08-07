@@ -1,11 +1,11 @@
 brackets-sass
 ===========================
 
-Compiles *.scss files when changed. Updates *.scss files during Live Preview.
+Compiles *.scss/*.sass files when changed. Updates styles during Live Preview. Experimental support for Quick Edit.
 
 ## Features
 
-* Compiles `*.scss` files when changed and when any `@import` dependency is changed
+* Compiles `*.sass` and `*.scss` files when changed and when any partial (`@import` dependency) is changed
 * Generates source maps
 * Show SASS compiler errors
 * Update CSS in Brackets' Live Preview 
@@ -15,7 +15,6 @@ Compiles *.scss files when changed. Updates *.scss files during Live Preview.
 * Compile keyboard shortcut (instead of waiting for file changes)
 * Selector highlighting
 * Swap `libsass` for Ruby `sass` compiler implementation
-    * .sass indented syntax support
 
 ## Preferences
 

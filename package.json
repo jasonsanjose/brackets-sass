@@ -8,11 +8,11 @@
     "url" : "http://github.com/jasonsanjose/brackets-sass.git"
   },
   "license": "MIT",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "engines": {
     "brackets": ">=0.38"
   },
-  "description": "Compiles SASS *.scss files when changed. Updates *.scss files during Live Preview.",
+  "description": "Compiles SASS *.sass/*.scss files when changed. Updates styles during Live Preview. Experimental support for Quick Edit.",
   "keywords": ["sass", "scss", "live", "preview", "compile", "compiler", "preprocess", "preprocessor", "libsass", "node-sass"],
   "devDependencies": {
     "grunt": "0.4.1",
