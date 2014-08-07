@@ -110,7 +110,7 @@ module.exports = function (grunt) {
             gitinfo = grunt.config("gitinfo");
 
         // Add SHA
-        version = version + "+sha." + gitinfo.local.branch.current.shortSHA;
+        version = version + "-" + gitinfo.local.branch.current.lastCommitNumber;
 
         packageJSON.version = version;
         grunt.config("pkg", packageJSON);
