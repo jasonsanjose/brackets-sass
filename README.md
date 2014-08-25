@@ -28,8 +28,12 @@ Enable/Disable SASS compilation for a file. Default: `true`
 ### sass.options
 Derived from [node-sass](https://github.com/andrew/node-sass) README.
 
+### outputDir
+`outputDir` is a `String` relative file path (relative to the input file) to output both the CSS file and the source map.
+Default: `<input file parent directory>`.
+
 ### output
-`output` is a `String` relative file path (relative to the input file) for the output CSS file.
+`output` is a `String` relative file path (relative to the input file, or relative to `outputDir`) for the output CSS file.
 Default: `<filename>.css`.
 
 #### includePaths
@@ -77,7 +81,7 @@ Resulting file tree will appear as follows:
         "sass/bootstrap.scss": {
             "sass.enabled": true,
             "sass.options": {
-                "output": "../css/bootstrap.css",
+                "outputDir": "../css/",
                 "includePaths": [],
                 "imagePath": null,
                 "sourceComments": "map",
