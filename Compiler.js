@@ -40,8 +40,8 @@ define(function (require, exports, module) {
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
     var RE_FILE_EXT     = /\.(sass|scss)$/,
-        PREF_ENABLED    = "sass.enabled",
-        PREF_OPTIONS    = "sass.options";
+        PREF_ENABLED    = "enabled",
+        PREF_OPTIONS    = "options";
 
     var extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
         scannedFileMap = {},
@@ -70,10 +70,23 @@ define(function (require, exports, module) {
             enabled = prefs.get(PREF_ENABLED, file.fullPath),
             options = prefs.get(PREF_OPTIONS, file.fullPath),
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
+            outputDir = (options && options.outputDir),
+            parentPath = file.parentPath,
             outputFile;
 
-        // TODO relative paths in output?
-        outputFile = FileSystem.getFileForPath(file.parentPath + outputName);
+        if (outputDir) {
+            if (outputDir.charAt(outputDir.length - 1) !== "/") {
+                outputDir = outputDir + "/";
+            }
+
+            if (FileSystem.isAbsolutePath(outputDir)) {
+                parentPath = outputDir;
+            } else {
+                parentPath = FileSystem.getDirectoryForPath(parentPath + outputDir).fullPath;
+            }
+        }
+
+        outputFile = FileSystem.getFileForPath(parentPath + outputName);
 
         options = _.defaults(options || {}, {
             outputStyle: "nested",
