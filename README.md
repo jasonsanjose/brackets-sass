@@ -15,6 +15,7 @@ Compiles *.scss/*.sass files when changed. Updates styles during Live Preview. E
 * Compile keyboard shortcut (instead of waiting for file changes)
 * Selector highlighting
 * Swap `libsass` for Ruby `sass` compiler implementation
+* Compass support
 
 ## Preferences
 
