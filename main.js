@@ -166,7 +166,9 @@ define(function (require, exports, module) {
         return deferred.promise();
     }
     
-    CSSUtils.findMatchingRules = findMatchingRules;
+    // TODO Reconcile this with new quick edit support for SCSS/LESS in Brackets 44
+    //      Can still provide value for SASS indented syntax
+    // CSSUtils.findMatchingRules = findMatchingRules;
     
     /**
      * @private
