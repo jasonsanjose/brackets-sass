@@ -125,7 +125,7 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
 
     // Ensure relative paths so that absolute paths don't sneak into generated
     // CSS and source maps
-    includePaths = _toRelativePaths(file, includePaths),
+    includePaths = _toRelativePaths(file, includePaths);
     imagePaths = _toRelativePaths(file, imagePaths);
 
     // Paths are relative to current working directory (file parent folder)
@@ -179,7 +179,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
 
     // Ensure relative paths so that absolute paths don't sneak into generated
     // CSS and source maps
-    includePaths = _toRelativePaths(tmpFile, includePaths),
+    includePaths = _toRelativePaths(tmpFile, includePaths);
     imagePaths = _toRelativePaths(tmpFile, imagePaths);
 
     // Add original file dir as includePath to handle "../" relative imports
