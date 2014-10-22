@@ -104,9 +104,15 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         }*/
     });
 
+    var resolvedIncludePaths = [];
+
+    includePaths.forEach(function (includePath) {
+        resolvedIncludePaths.push(path.resolve(path.dirname(file), includePath));
+    });
+
     child.send({
         file: file,
-        includePaths: includePaths,
+        includePaths: resolvedIncludePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
         sourceComments: sourceComments,
@@ -149,6 +155,25 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     // Copy files to temp folder
     fsextra.copySync(originalParent, tmpFolder);
     
+    includePaths = includePaths || [];
+
+    // includePath is resolved based on temp location (not original folder)
+    var resolvedIncludePaths = [],
+        tmpIncludePath,
+        resolved;
+
+    includePaths.forEach(function (includePath) {
+        // Copy includePath files to temp folder
+        resolved = path.resolve(originalParent, includePath);
+        tmpIncludePath = tmpDirPath + resolved;
+        fsextra.copySync(resolved, tmpIncludePath);
+
+        resolvedIncludePaths.push(tmpIncludePath);
+    });
+
+    // Add original file dir as includePath
+    resolvedIncludePaths.unshift(originalParent);
+    
     // Write in-memory files to temp folder
     var absPaths = Object.keys(inMemoryFiles),
         inMemoryText;
@@ -158,11 +183,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
         fs.writeFileSync(tmpDirPath + normalize(absPath), inMemoryText);
     });
     
-    // Add original file dir as includePath
-    includePaths = includePaths || [];
-    includePaths.unshift(originalParent);
-    
-    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
+    render(tmpFile, resolvedIncludePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
         // Remove tmpdir path prefix from error paths
         if (errors) {
             errors.forEach(function (error) {
@@ -203,7 +224,6 @@ function init(domainManager) {
         "Returns the path to an application",
         [
             {name: "file", type: "string"},
-            {name: "data", type: "string"},
             {name: "includePaths", type: "array"},
             {name: "imagePath", type: "string"},
             {name: "outputStyle", type: "string"},
