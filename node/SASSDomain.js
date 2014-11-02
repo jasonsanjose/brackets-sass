@@ -72,8 +72,27 @@ function parseError(error, file) {
     return [details];
 }
 
+function _toRelativePaths(file, pathsArray) {
+    var retval = [],
+        absolute,
+        relative;
+
+    if (pathsArray) {
+        pathsArray.forEach(function (p) {
+            absolute = path.resolve(file, p);
+            relative = path.relative(file, absolute);
+            retval.push(relative);
+        });
+    }
+
+    return retval;
+}
+
 function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
-    var child = cp.fork(__dirname + "/render");
+    var renderScript = __dirname + "/render",
+        cwd = path.dirname(file) + "/",
+        options = { cwd: cwd },
+        child = cp.fork(renderScript, [], options);
 
     child.on("message", function (message) {
         if (message.css) {
@@ -104,20 +123,23 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         }*/
     });
 
-    var resolvedIncludePaths = [];
+    // Ensure relative paths so that absolute paths don't sneak into generated
+    // CSS and source maps
+    includePaths = _toRelativePaths(file, includePaths);
+    imagePaths = _toRelativePaths(file, imagePaths);
 
-    includePaths.forEach(function (includePath) {
-        resolvedIncludePaths.push(path.resolve(path.dirname(file), includePath));
-    });
-
-    child.send({
-        file: file,
-        includePaths: resolvedIncludePaths,
+    // Paths are relative to current working directory (file parent folder)
+    var renderMsg = {
+        cwd: cwd,
+        file: path.basename(file),
+        includePaths: includePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
         sourceComments: sourceComments,
         sourceMap: sourceMap
-    });
+    };
+
+    child.send(renderMsg);
 }
 
 /**
@@ -148,31 +170,20 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
 
     // Mark folder for delete
     tmpFolders.push(tmpFolder);
-
-    // Adjust sourceMap path
-    sourceMap = tmpDirPath + sourceMap;
     
     // Copy files to temp folder
     fsextra.copySync(originalParent, tmpFolder);
     
-    includePaths = includePaths || [];
-
     // includePath is resolved based on temp location (not original folder)
-    var resolvedIncludePaths = [],
-        tmpIncludePath,
-        resolved;
+    var tmpIncludePath;
 
-    includePaths.forEach(function (includePath) {
-        // Copy includePath files to temp folder
-        resolved = path.resolve(originalParent, includePath);
-        tmpIncludePath = tmpDirPath + resolved;
-        fsextra.copySync(resolved, tmpIncludePath);
+    // Ensure relative paths so that absolute paths don't sneak into generated
+    // CSS and source maps
+    includePaths = _toRelativePaths(tmpFile, includePaths);
+    imagePaths = _toRelativePaths(tmpFile, imagePaths);
 
-        resolvedIncludePaths.push(tmpIncludePath);
-    });
-
-    // Add original file dir as includePath
-    resolvedIncludePaths.unshift(originalParent);
+    // Add original file dir as includePath to handle "../" relative imports
+    includePaths.unshift(originalParent);
     
     // Write in-memory files to temp folder
     var absPaths = Object.keys(inMemoryFiles),
@@ -183,11 +194,20 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
         fs.writeFileSync(tmpDirPath + normalize(absPath), inMemoryText);
     });
     
-    render(tmpFile, resolvedIncludePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
+    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
         // Remove tmpdir path prefix from error paths
         if (errors) {
+            var indexOfTemp;
+
             errors.forEach(function (error) {
-                error.path = error.path.replace(tmpDirPath, "");
+                // FIXME why does path start with /private on mac sometimes?
+                indexOfTemp = error.path.indexOf(tmpDirPath);
+
+                if (indexOfTemp >= 0) {
+                    error.path = error.path.slice(indexOfTemp + tmpDirPath.length);
+                } else {
+                    error.path = error.path.replace(tmpDirPath, "");
+                }
             });
         }
 

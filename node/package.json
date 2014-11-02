@@ -1,7 +1,7 @@
 {
   "name": "brackets-sass-node",
   "devDependencies": {
-    "node-sass": "0.9.3",
+    "node-sass": "1.0.1",
     "fs-extra": "0.8.1"
   }
 }

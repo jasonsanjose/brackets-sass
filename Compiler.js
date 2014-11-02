@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 /*jslint nomen:true, vars:true, regexp:true*/
-/*global window, console, define, brackets, $, Mustache*/
+/*global window, console, define, brackets, $, PathUtils*/
 
 define(function (require, exports, module) {
     "use strict";
@@ -46,9 +46,37 @@ define(function (require, exports, module) {
     var extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
         scannedFileMap = {},
         partialErrorMap = {};
+
+    function _fixSourceMapText(mapText, prefs) {
+        var json = JSON.parse(mapText),
+            inputFile = prefs.inputFile,
+            cssFilePath = prefs.outputCSSFile.fullPath,
+            sourceMapFilePath = prefs.outputSourceMapFile.fullPath;
+
+        // Output CSS file should be relative to the source map
+        json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
+
+        // For some reason, sources are output relative to the CWD
+        // Add a sourceRoot to fix
+        json.sourceRoot = PathUtils.makePathRelative(inputFile.parentPath, sourceMapFilePath);
+
+        // TODO read tab/space preference?
+        return JSON.stringify(json, null, "  ");
+    }
+
+    function _makeSourceMapRelativeToOutput(prefs) {
+        var sourceMapPath = prefs.outputSourceMapFile.fullPath,
+            cssFilePath = prefs.outputCSSFile.fullPath;
+
+        // sourceMap should be relative to the output file
+        // This is only used when generating sourceMappingURL
+        return PathUtils.makePathRelative(sourceMapPath, cssFilePath);
+    }
     
-    function _render(path, options) {
-        var deferred = new $.Deferred();
+    function _render(path, prefs) {
+        var deferred = new $.Deferred(),
+            options = prefs.options,
+            sourceMap = _makeSourceMapRelativeToOutput(prefs);
         
         var renderPromise = _nodeDomain.exec("render",
                  path,
@@ -56,10 +84,10 @@ define(function (require, exports, module) {
                  options.imagePath,
                  options.outputStyle,
                  options.sourceComments,
-                 options.sourceMap);
+                 sourceMap);
         
         renderPromise.then(function (response) {
-            deferred.resolve(response.css, response.map);
+            deferred.resolve(response.css, _fixSourceMapText(response.map, prefs));
         }, deferred.reject);
         
         return deferred.promise();
@@ -100,6 +128,7 @@ define(function (require, exports, module) {
         return {
             enabled: enabled,
             options: options,
+            inputFile: file,
             outputCSSFile: outputFile,
             outputSourceMapFile: FileSystem.getFileForPath(options.sourceMap)
         };
@@ -209,7 +238,7 @@ define(function (require, exports, module) {
             mapFile = prefs.outputSourceMapFile,
             renderPromise;
         
-        renderPromise = _render(sassFile.fullPath, prefs.options);
+        renderPromise = _render(sassFile.fullPath, prefs);
         
         return renderPromise.then(function (css, map) {
             var eventData = {
@@ -246,6 +275,7 @@ define(function (require, exports, module) {
             prefs = _getPreferencesForFile(sassFile),
             cssFile = prefs.outputCSSFile,
             mapFile = prefs.outputSourceMapFile,
+            sourceMap = _makeSourceMapRelativeToOutput(prefs),
             options = prefs.options,
             previewPromise,
             inMemoryFiles = _getInMemoryFiles(docs);
@@ -259,7 +289,7 @@ define(function (require, exports, module) {
             options.imagePath,
             options.outputStyle,
             "map",
-            mapFile.fullPath);
+            sourceMap);
         
         previewPromise.then(function (response) {
             var eventData = {
@@ -269,7 +299,7 @@ define(function (require, exports, module) {
                 },
                 sourceMap: {
                     file: mapFile,
-                    contents: response.map
+                    contents: _fixSourceMapText(response.map, prefs)
                 }
             };
             

@@ -332,6 +332,7 @@ define(function (require, exports, module) {
             if (_isSassFileInput(entry)) {
                 // Compile a changed input file
                 filesToCompile.push(entry);
+                findUsage.push(entry);
             } else if (_isSassFilePartial(entry)) {
                 // Check for usage of a partial file
                 findUsage.push(entry);
