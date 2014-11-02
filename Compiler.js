@@ -36,7 +36,7 @@ define(function (require, exports, module) {
         NodeDomain          = brackets.getModule("utils/NodeDomain");
     
     // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/SASSDomain"),
+    var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
     var RE_FILE_EXT     = /\.(sass|scss)$/,
