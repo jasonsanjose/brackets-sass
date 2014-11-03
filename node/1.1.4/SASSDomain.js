@@ -39,6 +39,20 @@ var _domainManager,
 // [path]:[line]:[error string]
 var RE_ERROR = /(.*)(:([0-9]+):)(.*)/;
 
+/**
+ * Normalize path separator, drop drive letter on windows, and
+ * return new string starting with first path separator.
+ * e.g. C:/Users/me/file.txt -> \Users\me\file.txt
+ */
+function normalize(fullPath) {
+    // Convert path separator for windows
+    var result = path.resolve(path.normalize(fullPath));
+    
+    // Drop drive letter
+    var firstSep = result.indexOf(path.sep);
+    return (firstSep >= 0) ? result.slice(firstSep) : result;
+}
+
 function tmpdir() {
     var baseTmpDir = os.tmpdir();
     
@@ -76,14 +90,16 @@ function _toRelativePaths(file, pathsArray) {
     var retval = [],
         absolute,
         relative;
-    
-    pathsArray = Array.isArray(pathsArray) ? pathsArray : [pathsArray];
 
     if (pathsArray) {
+        pathsArray = Array.isArray(pathsArray) ? pathsArray : [pathsArray];
+        
         pathsArray.forEach(function (p) {
             absolute = path.resolve(file, p);
             relative = path.relative(file, absolute);
             retval.push(relative);
+            
+            console.log("_toRelativePaths: " + absolute);
         });
     }
 
@@ -94,12 +110,14 @@ function _toAbsolutePaths(file, pathsArray) {
     var retval = [],
         absolute;
     
-    pathsArray = Array.isArray(pathsArray) ? pathsArray : [pathsArray];
-
     if (pathsArray) {
+        pathsArray = Array.isArray(pathsArray) ? pathsArray : [pathsArray];
+
         pathsArray.forEach(function (p) {
             absolute = path.resolve(file, p);
             retval.push(absolute);
+            
+            console.log("_toAbsolutePaths: " + absolute);
         });
     }
 
@@ -107,8 +125,8 @@ function _toAbsolutePaths(file, pathsArray) {
 }
 
 function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
-    var renderScript = __dirname + "/render",
-        cwd = path.dirname(file) + "/",
+    var renderScript = __dirname + path.sep + "render",
+        cwd = path.resolve(path.dirname(file)) + path.sep,
         options = { cwd: cwd },
         child = cp.fork(renderScript, [], options);
 
@@ -143,10 +161,8 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
 
     // Ensure relative paths so that absolute paths don't sneak into generated
     // CSS and source maps
-    includePaths = _toRelativePaths(file, includePaths);
-    imagePaths = _toRelativePaths(file, imagePaths);
-    
-    console.log(includePaths);
+    includePaths = _toRelativePaths(cwd, includePaths);
+    imagePaths = _toRelativePaths(cwd, imagePaths);
 
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
@@ -158,22 +174,10 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         sourceComments: sourceComments,
         sourceMap: sourceMap
     };
+    
+    console.log(renderMsg);
 
     child.send(renderMsg);
-}
-
-/**
- * Normalize path separator, drop drive letter on windows, and
- * return new string starting with first path separator.
- * e.g. C:/Users/me/file.txt -> \Users\me\file.txt
- */
-function normalize(fullPath) {
-    // Convert path separator for windows
-    var result = path.normalize(fullPath);
-    
-    // Drop drive letter
-    var firstSep = result.indexOf(path.sep);
-    return (firstSep >= 0) ? result.slice(firstSep) : result;
 }
 
 function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
@@ -196,10 +200,10 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     
     // includePath is resolved based on temp location (not original folder)
     var tmpIncludePath;
-
+    
     // Convert include and image paths to absolute paths
-    includePaths = _toAbsolutePaths(tmpFile, includePaths);
-    imagePaths = _toAbsolutePaths(tmpFile, imagePaths);
+    includePaths = _toAbsolutePaths(originalParent, includePaths);
+    imagePaths = _toAbsolutePaths(originalParent, imagePaths);
 
     // Add original file dir as includePath to handle "../" relative imports
     includePaths.unshift(originalParent);
