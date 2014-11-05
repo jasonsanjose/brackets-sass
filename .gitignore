@@ -1,3 +1,4 @@
 /jasonsanjose.brackets-sass*.zip
 /dist
 /node_modules
+/node/1.1.4/node_modules/node-sass/build
