@@ -34,6 +34,7 @@ var cp = require("child_process"),
     sass = require("node-sass");
 
 var _domainManager,
+    _tmpdir,
     tmpFolders = [];
 
 // [path]:[line]:[error string]
@@ -54,6 +55,10 @@ function normalize(fullPath) {
 }
 
 function tmpdir() {
+    if (_tmpdir) {
+        return _tmpdir;
+    }
+    
     var baseTmpDir = os.tmpdir();
     
     if (baseTmpDir.charAt(baseTmpDir.length - 1) !== path.sep) {
@@ -98,8 +103,6 @@ function _toRelativePaths(file, pathsArray) {
             absolute = path.resolve(file, p);
             relative = path.relative(file, absolute);
             retval.push(relative);
-            
-            console.log("_toRelativePaths: " + absolute);
         });
     }
 
@@ -116,8 +119,6 @@ function _toAbsolutePaths(file, pathsArray) {
         pathsArray.forEach(function (p) {
             absolute = path.resolve(file, p);
             retval.push(absolute);
-            
-            console.log("_toAbsolutePaths: " + absolute);
         });
     }
 
@@ -161,9 +162,9 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
 
     // Ensure relative paths so that absolute paths don't sneak into generated
     // CSS and source maps
-    includePaths = _toRelativePaths(cwd, includePaths);
-    imagePaths = _toRelativePaths(cwd, imagePaths);
-
+    includePaths = _toAbsolutePaths(cwd, includePaths);
+    imagePaths = _toAbsolutePaths(cwd, imagePaths);
+    
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
         cwd: cwd,
@@ -174,19 +175,17 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         sourceComments: sourceComments,
         sourceMap: sourceMap
     };
-    
-    console.log(renderMsg);
 
     child.send(renderMsg);
 }
 
 function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
     // Convert path separator for windows
-    file = normalize(file);
+    var normalizedFile = normalize(file);
     
-    var originalParent = path.dirname(file),
+    var originalParent = path.dirname(normalizedFile),
         tmpDirPath = tmpdir(),
-        tmpFolder = tmpDirPath + originalParent,
+        tmpFolder = path.join(tmpDirPath, originalParent),
         tmpFile = tmpFolder + path.sep + path.basename(file);
     
     // Delete existing files if they exist
@@ -196,7 +195,8 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     tmpFolders.push(tmpFolder);
     
     // Copy files to temp folder
-    fsextra.copySync(originalParent, tmpFolder);
+    //fsextra.copySync(originalParent, tmpFolder);
+    fsextra.copySync(file, tmpFile);
     
     // includePath is resolved based on temp location (not original folder)
     var tmpIncludePath;
@@ -214,26 +214,53 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     
     absPaths.forEach(function (absPath) {
         inMemoryText = inMemoryFiles[absPath];
-        fs.writeFileSync(tmpDirPath + normalize(absPath), inMemoryText);
+        fsextra.outputFileSync(tmpDirPath + normalize(absPath), inMemoryText);
     });
     
     render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
         // Remove tmpdir path prefix from error paths
         if (errors) {
-            var indexOfTemp;
-
+            var indexOfTemp,
+                normalizedTempFilePath = path.normalize(tmpFile),
+                normalizedErrorPath;
+            
             errors.forEach(function (error) {
-                // FIXME why does path start with /private on mac sometimes?
-                indexOfTemp = error.path.indexOf(tmpDirPath);
-
-                if (indexOfTemp >= 0) {
-                    error.path = error.path.slice(indexOfTemp + tmpDirPath.length);
+                normalizedErrorPath = path.normalize(error.path);
+                
+                if (normalizedErrorPath === normalizedTempFilePath) {
+                    error.path = file;
                 } else {
-                    error.path = error.path.replace(tmpDirPath, "");
+                    error.path = path.resolve(tmpFolder, error.path);
                 }
             });
-        }
+        } else {
+            // Convert relative paths to tmpFile in source map
+            var map = JSON.parse(result.map);
 
+            if (Array.isArray(map.sources)) {
+                var newSources = [],
+                    absPath;
+
+                map.sources.forEach(function (source) {
+                    // Resolve to absolute path, then resolve relative to input file parent folder
+                    absPath = path.resolve(tmpFolder, source);
+
+                    if (path.normalize(absPath) === tmpFile) {
+                        // Special case for input file
+                        newSources.push(path.basename(file));
+                    } else {
+                        newSources.push(path.relative(path.dirname(file), absPath));
+                    }
+                });
+
+                // Replaces sources with updated relative paths
+                map.sources = newSources;
+
+                // Send updated JSON string
+                result.map = JSON.stringify(map);
+            }
+        }
+        
         callback(errors, result);
     });
 }
@@ -246,8 +273,14 @@ function deleteTempFiles() {
     tmpFolders = [];
 }
 
-function mkdirp(path, callback) {
-    fsextra.mkdirp(path, callback);
+function mkdirp(pathToDir, callback) {
+    fsextra.mkdirp(pathToDir, callback);
+}
+
+
+function setTempDir(pathToDir, callback) {
+    _tmpdir = path.join(pathToDir, "brackets-sass");
+    fsextra.mkdirp(_tmpdir, callback);
 }
 
 /**
@@ -307,6 +340,17 @@ function init(domainManager) {
         mkdirp,
         true,
         "Creates a directory. If the parent hierarchy doesn't exist, it's created. Like mkdir -p.",
+        [
+            {name: "path", type: "string"}
+        ]
+    );
+    
+    domainManager.registerCommand(
+        "sass",
+        "setTempDir",
+        setTempDir,
+        true,
+        "Set the temporary directory used for in-memory compiling",
         [
             {name: "path", type: "string"}
         ]

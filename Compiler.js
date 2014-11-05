@@ -39,6 +39,17 @@ define(function (require, exports, module) {
     var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
+    // Initialize temp folder on windows only
+    // This is to normalize windows paths instead of using Node's os.tmpdir()
+    // which usually resolves to C:\Users\name~1\..., getApplicationSupportDirectory
+    // will resolve to C:\Users\name_000 instead which is more compatible
+    // with Brackets' FileSystem paths
+    if (brackets.platform === "win") {
+        _nodeDomain.exec("setTempDir", brackets.app.getApplicationSupportDirectory()).fail(function (err) {
+            console.error("Failed creating brackets-sass temporary directory: " + err);
+        });
+    }
+    
     var RE_FILE_EXT     = /\.(sass|scss)$/,
         PREF_ENABLED    = "enabled",
         PREF_OPTIONS    = "options";
@@ -163,7 +174,9 @@ define(function (require, exports, module) {
         var map = {};
         
         _.each(docs, function (doc) {
-            map[doc.file.fullPath] = doc.getText();
+            if (doc.isDirty) {
+                map[doc.file.fullPath] = doc.getText();
+            }
         });
         
         return map;
@@ -186,8 +199,15 @@ define(function (require, exports, module) {
         errors = Array.isArray(errors) ? errors : [errors];
 
         _.each(errors, function (err) {
-            // Can't report errors on files other than the current document, see CodeInspection
-            if (path !== err.path) {
+            if (typeof err === "string") {
+                err = {
+                    message: "Runtime error: " + err,
+                    pos: {
+                        line: -1
+                    }
+                };
+            } else if (path !== err.path) {
+                // Can't report errors on files other than the current document, see CodeInspection
                 // Clone error
                 var clonedError = _.clone(err);
                 clonedError.pos = _.clone(err.pos);
