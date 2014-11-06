@@ -1,7 +1,11 @@
 brackets-sass
 ===========================
 
-Compiles *.scss/*.sass files when changed. Updates styles during Live Preview. Experimental support for Quick Edit.
+Compiles *.scss/*.sass files when changed. Updates styles during Live Preview.
+
+## Compatibility
+
+This extension uses [libsass](http://github.com/sass/libsass) instead of the Ruby-based `sass` compiler. For details on compatibility with the latest Sass features and popular Sass frameworks, [see the wiki](http://github.com/jasonsanjose/brackets-sass/wiki#compatibility).
 
 ## Features
 
@@ -14,14 +18,14 @@ Compiles *.scss/*.sass files when changed. Updates styles during Live Preview. E
 
 * Compile keyboard shortcut (instead of waiting for file changes)
 * Selector highlighting
-* Swap `libsass` for Ruby `sass` compiler implementation
+* Option to swap `libsass` for Ruby `sass` compiler implementation
 * Compass support
 
 ## Preferences
 
 These options are passed through to [node-sass](https://github.com/andrew/node-sass).
 
-Reference: [Sample project](https://github.com/jasonsanjose/brackets-source-map-demo-files) and `.brackets.json` preferences file.
+Reference: [Sample project using Bourbon](https://github.com/jasonsanjose/bourbon-example) and `.brackets.json` preferences file.
 
 ### sass.enabled
 Enable/Disable SASS compilation for a file. Default: `true`
@@ -66,32 +70,31 @@ Default: `<filename>.css.map`.
 ```
 /*
 Resulting file tree will appear as follows:
++ bower_components
+|--- bourbon/dist/_bourbon.scss
 + css
-|--- bootstrap.css
-|--- bootstrap.css.map
-+ sass
-|--- bootstrap.scss
-|--+ bootstrap
-|  |--- somefiles.scss
+|--- app.css
+|--- app.css.map
++ scss
+|--- app.scss
 */
 
 /* REMOVE comments from json file before using this template */
 {
     "path": {
         /* default options */
-        "sass/bootstrap.scss": {
+        "scss/app.scss": {
             "sass.enabled": true,
             "sass.options": {
                 "outputDir": "../css/",
                 "includePaths": [],
                 "imagePath": null,
                 "sourceComments": "map",
-                "sourceMap": "bootstrap.css.map",
                 "outputStyle": "nested"
             }
         },
         /* disable compiling @import files in this project */
-        "sass/bootstrap/*.scss": {
+        "scss/imports/*.scss": {
             "sass.enabled": false
         }
     }
