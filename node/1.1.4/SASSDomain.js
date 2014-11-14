@@ -27,6 +27,7 @@
 "use strict";
 
 var cp = require("child_process"),
+    crypto = require("crypto"),
     fs = require("fs"),
     fsextra = require("fs-extra"),
     os = require("os"),
@@ -35,10 +36,20 @@ var cp = require("child_process"),
 
 var _domainManager,
     _tmpdir,
+    _nodeSassProcess,
     tmpFolders = [];
 
 // [path]:[line]:[error string]
 var RE_ERROR = /(.*)(:([0-9]+):)(.*)/;
+
+// Cleanup node-sass child process on quit
+process.on("exit", function () {
+    if (!_nodeSassProcess) {
+        return;
+    }
+
+    _nodeSassProcess.kill();
+});
 
 /**
  * Normalize path separator, drop drive letter on windows, and
@@ -125,13 +136,45 @@ function _toAbsolutePaths(file, pathsArray) {
     return retval;
 }
 
-function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
-    var renderScript = __dirname + path.sep + "render",
-        cwd = path.resolve(path.dirname(file)) + path.sep,
-        options = { cwd: cwd },
-        child = cp.fork(renderScript, [], options);
+function _createChildProcess() {
+    if (!_nodeSassProcess) {
+        var renderScript = __dirname + path.sep + "render";
 
-    child.on("message", function (message) {
+        _nodeSassProcess = cp.fork(renderScript, []);
+
+        // Recreate the process if it dies unexpectedly
+        _nodeSassProcess.on("exit", function() {
+            _nodeSassProcess = null;
+        });
+    }
+
+    return _nodeSassProcess;
+}
+
+function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+    var childProcess = _createChildProcess(),
+        cwd = path.resolve(path.dirname(file)) + path.sep,
+        messageListener,
+        errorListener,
+        exitListener,
+        timeout;
+
+    // Set timeout
+    timeout = setTimeout(function () {
+        childProcess.kill();
+    }, 10000);
+
+    function cleanup() {
+        clearTimeout(timeout);
+
+        childProcess.removeListener("message", messageListener);
+        childProcess.removeListener("error", errorListener);
+        childProcess.removeListener("exit", exitListener);
+    }
+
+    messageListener = function (message) {
+        cleanup();
+
         if (message.css) {
             callback(null, { css: message.css, map: message.map });
         } else if (message.error) {
@@ -139,13 +182,16 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         }/* else if (message.exitcode) {
             console.log("exitcode: " + message.exitcode);
         }*/
-    });
+    };
 
-    child.on("error", function (err) {
+    errorListener = function (err) {
+        cleanup();
         callback(err);
-    });
+    };
 
-    child.on("exit", function (code, signal) {
+    exitListener = function (code, signal) {
+        cleanup();
+
         if (code === null) {
             var errString = "Fatal node-sass error, signal=" + signal;
 
@@ -158,17 +204,22 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         }/* else {
             console.log("normal exit code: " + code);
         }*/
-    });
+    };
+
+    childProcess.once("message", messageListener);
+    childProcess.once("error", errorListener);
+    childProcess.once("exit", exitListener);
 
     // Ensure relative paths so that absolute paths don't sneak into generated
     // CSS and source maps
     includePaths = _toAbsolutePaths(cwd, includePaths);
     imagePaths = _toAbsolutePaths(cwd, imagePaths);
+
+    includePaths.unshift(cwd);
     
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
-        cwd: cwd,
-        file: path.basename(file),
+        file: path.resolve(file),
         includePaths: includePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
@@ -176,7 +227,9 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         sourceMap: sourceMap
     };
 
-    child.send(renderMsg);
+    console.log(renderMsg);
+
+    childProcess.send(renderMsg);
 }
 
 function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
@@ -184,15 +237,16 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     var normalizedFile = normalize(file);
     
     var originalParent = path.dirname(normalizedFile),
-        tmpDirPath = tmpdir(),
+        md5 = crypto.createHash("md5").update(file).digest("hex"),
+        tmpDirPath = path.join(tmpdir(), md5),
         tmpFolder = path.join(tmpDirPath, originalParent),
         tmpFile = tmpFolder + path.sep + path.basename(file);
     
-    // Delete existing files if they exist
-    fsextra.removeSync(tmpFolder);
+    // Delete temp files if they exist
+    fsextra.removeSync(tmpDirPath);
 
     // Mark folder for delete
-    tmpFolders.push(tmpFolder);
+    tmpFolders.push(tmpDirPath);
     
     // Copy files to temp folder
     //fsextra.copySync(originalParent, tmpFolder);
@@ -214,7 +268,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     
     absPaths.forEach(function (absPath) {
         inMemoryText = inMemoryFiles[absPath];
-        fsextra.outputFileSync(tmpDirPath + normalize(absPath), inMemoryText);
+        fsextra.outputFileSync(path.join(tmpDirPath, normalize(absPath)), inMemoryText);
     });
     
     render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {

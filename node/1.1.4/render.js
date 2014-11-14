@@ -29,12 +29,10 @@ var sass = require("node-sass");
 process.on("message", function (message) {
     message.success = function (css, map) {
         process.send({ css: css, map: map });
-        process.exit(0);
     };
 
     message.error = function (error) {
         process.send({ error: error });
-        process.exit(1);
     };
 
     sass.render(message);
