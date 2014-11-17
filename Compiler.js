@@ -36,7 +36,7 @@ define(function (require, exports, module) {
         NodeDomain          = brackets.getModule("utils/NodeDomain");
     
     // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4/SASSDomain"),
+    var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4-1/SASSDomain"),
         _nodeDomain = new NodeDomain("sass", _domainPath);
     
     // Initialize temp folder on windows only
@@ -58,9 +58,8 @@ define(function (require, exports, module) {
         scannedFileMap = {},
         partialErrorMap = {};
 
-    function _fixSourceMapText(mapText, prefs) {
-        var json = JSON.parse(mapText),
-            inputFile = prefs.inputFile,
+    function _fixSourceMap(json, prefs) {
+        var inputFile = prefs.inputFile,
             cssFilePath = prefs.outputCSSFile.fullPath,
             sourceMapFilePath = prefs.outputSourceMapFile.fullPath;
 
@@ -98,7 +97,7 @@ define(function (require, exports, module) {
                  sourceMap);
         
         renderPromise.then(function (response) {
-            deferred.resolve(response.css, _fixSourceMapText(response.map, prefs));
+            deferred.resolve(response.css, _fixSourceMap(response.map, prefs));
         }, deferred.reject);
         
         return deferred.promise();
@@ -319,7 +318,7 @@ define(function (require, exports, module) {
                 },
                 sourceMap: {
                     file: mapFile,
-                    contents: _fixSourceMapText(response.map, prefs)
+                    contents: _fixSourceMap(response.map, prefs)
                 }
             };
             

@@ -65,9 +65,13 @@ module.exports = function (grunt) {
                         dest: 'dist/',
                         src: [
                             'package.json',
-                            'node/**',
-                            '!node/node_modules/node-sass/build/**',
-                            '!node/node_modules/node-sass/test/**'
+                            'node/*/render.js',
+                            'node/*/SASSDomain.js',
+                            '!node/*/node_modules/node-sass-binaries/**',
+                            'node/*/node_modules/fs-extra/**',
+                            'node/*/node_modules/node-sass/{package.json,sass.js,binding.gyp}',
+                            'node/*/node_modules/node-sass/bin/**',
+                            'node/*/node_modules/node-sass/node_modules/object-assign/**'
                         ]
                     }
                 ]

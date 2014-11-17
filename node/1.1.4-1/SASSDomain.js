@@ -27,6 +27,7 @@
 "use strict";
 
 var cp = require("child_process"),
+    crypto = require("crypto"),
     fs = require("fs"),
     fsextra = require("fs-extra"),
     os = require("os"),
@@ -35,10 +36,22 @@ var cp = require("child_process"),
 
 var _domainManager,
     _tmpdir,
+    _nodeSassProcess,
+    _currentRenderMsg,
+    _queue = [],
     tmpFolders = [];
 
 // [path]:[line]:[error string]
 var RE_ERROR = /(.*)(:([0-9]+):)(.*)/;
+
+// Cleanup node-sass child process on quit
+process.on("exit", function () {
+    if (!_nodeSassProcess) {
+        return;
+    }
+
+    _nodeSassProcess.kill();
+});
 
 /**
  * Normalize path separator, drop drive letter on windows, and
@@ -91,6 +104,10 @@ function parseError(error, file) {
     return [details];
 }
 
+function _toArray(arr) {
+    return Array.isArray(arr) ? arr : [];
+}
+
 function _toRelativePaths(file, pathsArray) {
     var retval = [],
         absolute,
@@ -109,7 +126,7 @@ function _toRelativePaths(file, pathsArray) {
     return retval;
 }
 
-function _toAbsolutePaths(file, pathsArray) {
+function _toAbsolutePaths(file, pathsArray, tmpRoot) {
     var retval = [],
         absolute;
     
@@ -118,6 +135,12 @@ function _toAbsolutePaths(file, pathsArray) {
 
         pathsArray.forEach(function (p) {
             absolute = path.resolve(file, p);
+
+            // If tmpRoot is defined, and path is relative, add relative path in tmpRoot
+            if (tmpRoot && (p !== absolute)) {
+                retval.push(path.resolve(tmpRoot, p));
+            }
+            
             retval.push(absolute);
         });
     }
@@ -125,58 +148,133 @@ function _toAbsolutePaths(file, pathsArray) {
     return retval;
 }
 
-function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
-    var renderScript = __dirname + path.sep + "render",
-        cwd = path.resolve(path.dirname(file)) + path.sep,
-        options = { cwd: cwd },
-        child = cp.fork(renderScript, [], options);
+function _createChildProcess() {
+    if (!_nodeSassProcess) {
+        var renderScript = __dirname + path.sep + "render";
 
-    child.on("message", function (message) {
+        _nodeSassProcess = cp.fork(renderScript, []);
+
+        // Recreate the process if it dies unexpectedly
+        _nodeSassProcess.on("exit", function() {
+            _nodeSassProcess = null;
+        });
+    }
+
+    return _nodeSassProcess;
+}
+
+function _nextRender() {
+    if (_currentRenderMsg || _queue.length === 0) {
+        return;
+    }
+
+    _currentRenderMsg = _queue.shift();
+
+    var renderMsg = _currentRenderMsg,
+        callback = renderMsg._callback,
+        childProcess = _createChildProcess(),
+        messageListener,
+        errorListener,
+        exitListener,
+        timeout;
+
+    // Set timeout
+    timeout = setTimeout(function () {
+        childProcess.kill();
+    }, 10000);
+
+    function cleanup() {
+        _currentRenderMsg = null;
+        clearTimeout(timeout);
+
+        childProcess.removeListener("message", messageListener);
+        childProcess.removeListener("error", errorListener);
+        childProcess.removeListener("exit", exitListener);
+
+        _nextRender();
+    }
+
+    messageListener = function (message) {
+        cleanup();
+
         if (message.css) {
-            callback(null, { css: message.css, map: message.map });
+            // Convert sources array paths to be relative to input file
+            var sourceMapPath = renderMsg._sourceMapPath,
+                mapJSON = JSON.parse(message.map),
+                sourcePath,
+                inputParent = path.dirname(renderMsg.file);
+
+            mapJSON.sources.forEach(function (source, index) {
+                // Resolve from working directory (e.g. c:\windows\system32)
+                sourcePath = path.resolve(message._cwd, source);
+                sourcePath = path.relative(inputParent, sourcePath);
+
+                if (path.sep === "\\") {
+                    sourcePath = sourcePath.replace(/\\/g, "/");
+                }
+
+                // Set source path relative to input file parent (sourceRoot)
+                mapJSON.sources[index] = sourcePath;
+            });
+
+            callback(null, { css: message.css, map: mapJSON });
         } else if (message.error) {
-            callback(parseError(message.error, file));
+            callback(parseError(message.error, renderMsg._file));
         }/* else if (message.exitcode) {
             console.log("exitcode: " + message.exitcode);
         }*/
-    });
+    };
 
-    child.on("error", function (err) {
+    errorListener = function (err) {
+        cleanup();
         callback(err);
-    });
+    };
 
-    child.on("exit", function (code, signal) {
+    exitListener = function (code, signal) {
+        cleanup();
+
         if (code === null) {
             var errString = "Fatal node-sass error, signal=" + signal;
 
             callback([{
                 errorString: errString,
-                path: file,
+                path: renderMsg.file,
                 pos: { ch: 0 },
                 message: errString
             }]);
         }/* else {
             console.log("normal exit code: " + code);
         }*/
-    });
+    };
 
-    // Ensure relative paths so that absolute paths don't sneak into generated
-    // CSS and source maps
+    childProcess.once("message", messageListener);
+    childProcess.once("error", errorListener);
+    childProcess.once("exit", exitListener);
+
+    childProcess.send(renderMsg);
+}
+
+function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+    var cwd = path.resolve(path.dirname(file)) + path.sep;
+
     includePaths = _toAbsolutePaths(cwd, includePaths);
     imagePaths = _toAbsolutePaths(cwd, imagePaths);
     
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
-        cwd: cwd,
-        file: path.basename(file),
+        file: path.resolve(file),
         includePaths: includePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
         sourceComments: sourceComments,
-        sourceMap: sourceMap
+        sourceMap: sourceMap,
+        _file: file,
+        _callback: callback,
+        _sourceMapPath: path.resolve(cwd, sourceMap)
     };
 
-    child.send(renderMsg);
+    _queue.push(renderMsg);
+    _nextRender();
 }
 
 function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
@@ -184,29 +282,34 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     var normalizedFile = normalize(file);
     
     var originalParent = path.dirname(normalizedFile),
-        tmpDirPath = tmpdir(),
+        md5 = crypto.createHash("md5").update(file).digest("hex"),
+        tmpDirPath = path.join(tmpdir(), md5),
         tmpFolder = path.join(tmpDirPath, originalParent),
         tmpFile = tmpFolder + path.sep + path.basename(file);
     
-    // Delete existing files if they exist
-    fsextra.removeSync(tmpFolder);
+    // Delete temp files if they exist
+    fsextra.removeSync(tmpDirPath);
 
     // Mark folder for delete
-    tmpFolders.push(tmpFolder);
+    tmpFolders.push(tmpDirPath);
     
     // Copy files to temp folder
     //fsextra.copySync(originalParent, tmpFolder);
     fsextra.copySync(file, tmpFile);
     
-    // includePath is resolved based on temp location (not original folder)
-    var tmpIncludePath;
-    
-    // Convert include and image paths to absolute paths
-    includePaths = _toAbsolutePaths(originalParent, includePaths);
-    imagePaths = _toAbsolutePaths(originalParent, imagePaths);
+    // Convert include and image paths to absolute paths relative to parent folder
+    var tmpIncludePaths = _toAbsolutePaths(originalParent, includePaths, tmpFolder),
+        tmpImagePaths = _toAbsolutePaths(originalParent, imagePaths, tmpFolder);
+
+    // Copy include paths to tmpDirPath
+    tmpIncludePaths.forEach(function (absPath) {
+        if (fs.existsSync(absPath)) {
+            fsextra.copySync(absPath, path.join(tmpDirPath, normalize(absPath)));
+        }
+    });
 
     // Add original file dir as includePath to handle "../" relative imports
-    includePaths.unshift(originalParent);
+    tmpIncludePaths.unshift(originalParent);
     
     // Write in-memory files to temp folder
     var absPaths = Object.keys(inMemoryFiles),
@@ -214,10 +317,10 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
     
     absPaths.forEach(function (absPath) {
         inMemoryText = inMemoryFiles[absPath];
-        fsextra.outputFileSync(tmpDirPath + normalize(absPath), inMemoryText);
+        fsextra.outputFileSync(path.join(tmpDirPath, normalize(absPath)), inMemoryText);
     });
     
-    render(tmpFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
+    render(tmpFile, tmpIncludePaths, tmpImagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
         // Remove tmpdir path prefix from error paths
         if (errors) {
             var indexOfTemp,
@@ -235,7 +338,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
             });
         } else {
             // Convert relative paths to tmpFile in source map
-            var map = JSON.parse(result.map);
+            var map = result.map;
 
             if (Array.isArray(map.sources)) {
                 var newSources = [],
@@ -257,7 +360,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
                 map.sources = newSources;
 
                 // Send updated JSON string
-                result.map = JSON.stringify(map);
+                result.map = map;
             }
         }
         
