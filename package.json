@@ -8,7 +8,7 @@
     "url" : "http://github.com/jasonsanjose/brackets-sass.git"
   },
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "brackets": ">=0.38"
   },

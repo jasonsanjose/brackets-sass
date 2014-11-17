@@ -28,7 +28,7 @@ var sass = require("node-sass");
 
 process.on("message", function (message) {
     message.success = function (css, map) {
-        process.send({ css: css, map: map });
+        process.send({ css: css, map: map, _cwd: process.cwd() });
     };
 
     message.error = function (error) {
