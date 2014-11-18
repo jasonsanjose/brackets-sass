@@ -34,15 +34,16 @@ var cp = require("child_process"),
     path = require("path"),
     sass = require("node-sass");
 
+// [path]:[line]:[error string]
+var RE_ERROR = /(.*)(:([0-9]+):)(.*)/,
+    DOMAIN = "sass-v1.1.4-2";
+
 var _domainManager,
     _tmpdir,
     _nodeSassProcess,
     _currentRenderMsg,
     _queue = [],
     tmpFolders = [];
-
-// [path]:[line]:[error string]
-var RE_ERROR = /(.*)(:([0-9]+):)(.*)/;
 
 // Cleanup node-sass child process on quit
 process.on("exit", function () {
@@ -396,7 +397,7 @@ function init(domainManager) {
     }
     
     domainManager.registerCommand(
-        "sass",
+        DOMAIN,
         "render",
         render,
         true,
@@ -412,7 +413,7 @@ function init(domainManager) {
     );
     
     domainManager.registerCommand(
-        "sass",
+        DOMAIN,
         "preview",
         preview,
         true,
@@ -429,7 +430,7 @@ function init(domainManager) {
     );
     
     domainManager.registerCommand(
-        "sass",
+        DOMAIN,
         "deleteTempFiles",
         deleteTempFiles,
         false,
@@ -438,7 +439,7 @@ function init(domainManager) {
     );
     
     domainManager.registerCommand(
-        "sass",
+        DOMAIN,
         "mkdirp",
         mkdirp,
         true,
@@ -449,7 +450,7 @@ function init(domainManager) {
     );
     
     domainManager.registerCommand(
-        "sass",
+        DOMAIN,
         "setTempDir",
         setTempDir,
         true,
