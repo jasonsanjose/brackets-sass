@@ -1,7 +1,7 @@
 brackets-sass
 ===========================
 
-Compiles *.scss/*.sass files when changed. Updates styles during Live Preview.
+Compiles *.scss/*.sass files when changed. Updates styles during Live Preview. Demo video: http://youtu.be/gYE7jybP_5Y.
 
 ## Compatibility
 
