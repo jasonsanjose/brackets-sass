@@ -105,8 +105,8 @@ define(function (require, exports, module) {
 
     function _getPreferencesForFile(file) {
         var prefs = extensionPrefs,
-            enabled = prefs.get(PREF_ENABLED, file.fullPath),
-            options = prefs.get(PREF_OPTIONS, file.fullPath),
+            enabled = prefs.get(PREF_ENABLED, { path: file.fullPath }),
+            options = prefs.get(PREF_OPTIONS, { path: file.fullPath }),
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputDir = (options && options.outputDir),
             parentPath = file.parentPath,
