@@ -156,7 +156,7 @@ function _createChildProcess() {
         _nodeSassProcess = cp.fork(renderScript, []);
 
         // Recreate the process if it dies unexpectedly
-        _nodeSassProcess.on("exit", function() {
+        _nodeSassProcess.on("exit", function () {
             _nodeSassProcess = null;
         });
     }
@@ -407,7 +407,7 @@ function init(domainManager) {
             {name: "includePaths", type: "array"},
             {name: "imagePath", type: "string"},
             {name: "outputStyle", type: "string"},
-            {name: "sourceComments", type: "string"},
+            {name: "sourceComments", type: "boolean"},
             {name: "sourceMap", type: "string"}
         ]
     );
@@ -424,7 +424,7 @@ function init(domainManager) {
             {name: "includePaths", type: "array"},
             {name: "imagePath", type: "string"},
             {name: "outputStyle", type: "string"},
-            {name: "sourceComments", type: "string"},
+            {name: "sourceComments", type: "boolean"},
             {name: "sourceMap", type: "string"}
         ]
     );

@@ -128,7 +128,7 @@ define(function (require, exports, module) {
 
         options = _.defaults(options || {}, {
             outputStyle: "nested",
-            sourceComments: "map",
+            sourceComments: true,
             sourceMap: outputFile.name + ".map"
         });
 
@@ -253,7 +253,6 @@ define(function (require, exports, module) {
 
         var cssFile = prefs.outputCSSFile,
             options = prefs.options,
-            hasSourceMap = options.sourceComments === "map",
             mapFile = prefs.outputSourceMapFile,
             renderPromise;
         
