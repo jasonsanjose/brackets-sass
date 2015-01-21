@@ -36,8 +36,8 @@ define(function (require, exports, module) {
         NodeDomain          = brackets.getModule("utils/NodeDomain");
     
     // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4-2/SASSDomain"),
-        _nodeDomain = new NodeDomain("sass-v1.1.4-2", _domainPath);
+    var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4-3/SASSDomain"),
+        _nodeDomain = new NodeDomain("sass-v1.1.4-3", _domainPath);
     
     // Initialize temp folder on windows only
     // This is to normalize windows paths instead of using Node's os.tmpdir()

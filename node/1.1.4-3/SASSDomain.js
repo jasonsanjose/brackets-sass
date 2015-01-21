@@ -36,7 +36,7 @@ var cp = require("child_process"),
 
 // [path]:[line]:[error string]
 var RE_ERROR = /(.*)(:([0-9]+):)(.*)/,
-    DOMAIN = "sass-v1.1.4-2";
+    DOMAIN = "sass-v1.1.4-3";
 
 var _domainManager,
     _tmpdir,
