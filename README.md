@@ -55,14 +55,12 @@ Default: `null`
 Default: `nested`
 
 #### sourceComments
-`sourceComments` is a `String` to determine what debug information is included in the output file. Its value should be one of `'none', 'normal', 'map'`. The default is `'map'`.
-The `map` option will create the source map file in your CSS destination.
-[Important: `souceComments` is only supported when using the `file` option, and does nothing when using `data` flag.]
-Default: `map`
+`sourceComments` is a `Boolean` flag to determine what debug information is included in the output file.
+Default: `true`
 
 #### sourceMap
-If your `sourceComments` option is set to `map`, `sourceMap` allows setting a new path context for the referenced Sass files.
-The source map describes a path relative to your your `output` CSS file location. In most occasions this will work out-of-the-box but, in some cases, you may need to set a different output.
+If your `sourceComments` option is set to true, `sourceMap` allows setting a new path context for the referenced Sass files.
+The source map describes a path relative to your `output` CSS file location. In most occasions this will work out-of-the-box but, in some cases, you may need to set a different output.
 Default: `<filename>.css.map`.
 
 ### Sample .brackets.json File
@@ -81,6 +79,8 @@ Resulting file tree will appear as follows:
 
 /* REMOVE comments from json file before using this template */
 {
+    /* disable compiling other files that aren't the "main" file */
+    "sass.enabled": false,
     "path": {
         /* default options */
         "scss/app.scss": {
@@ -89,13 +89,9 @@ Resulting file tree will appear as follows:
                 "outputDir": "../css/",
                 "includePaths": [],
                 "imagePath": null,
-                "sourceComments": "map",
+                "sourceComments": true,
                 "outputStyle": "nested"
             }
-        },
-        /* disable compiling @import files in this project */
-        "scss/imports/*.scss": {
-            "sass.enabled": false
         }
     }
 }
