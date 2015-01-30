@@ -31,8 +31,7 @@ var cp = require("child_process"),
     fs = require("fs"),
     fsextra = require("fs-extra"),
     os = require("os"),
-    path = require("path"),
-    sass = require("node-sass");
+    path = require("path");
 
 // [path]:[line]:[error string]
 var RE_ERROR = /(.*)(:([0-9]+):)(.*)/,
@@ -40,18 +39,18 @@ var RE_ERROR = /(.*)(:([0-9]+):)(.*)/,
 
 var _domainManager,
     _tmpdir,
-    _nodeSassProcess,
+    _compilerProcess,
     _currentRenderMsg,
     _queue = [],
     tmpFolders = [];
 
 // Cleanup node-sass child process on quit
 process.on("exit", function () {
-    if (!_nodeSassProcess) {
+    if (!_compilerProcess) {
         return;
     }
 
-    _nodeSassProcess.kill();
+    _compilerProcess.kill();
 });
 
 /**
@@ -150,18 +149,16 @@ function _toAbsolutePaths(file, pathsArray, tmpRoot) {
 }
 
 function _createChildProcess() {
-    if (!_nodeSassProcess) {
+    if (!_compilerProcess) {
         var renderScript = __dirname + path.sep + "render";
-
-        _nodeSassProcess = cp.fork(renderScript, []);
+        _compilerProcess = cp.fork(renderScript);
 
         // Recreate the process if it dies unexpectedly
-        _nodeSassProcess.on("exit", function () {
-            _nodeSassProcess = null;
+        _compilerProcess.on("exit", function () {
+            _compilerProcess = null;
         });
     }
-
-    return _nodeSassProcess;
+    return _compilerProcess;
 }
 
 function _nextRender() {
@@ -200,8 +197,7 @@ function _nextRender() {
 
         if (message.css) {
             // Convert sources array paths to be relative to input file
-            var sourceMapPath = renderMsg._sourceMapPath,
-                mapJSON = JSON.parse(message.map),
+            var mapJSON = JSON.parse(message.map),
                 sourcePath,
                 inputParent = path.dirname(renderMsg.file);
 
@@ -255,7 +251,7 @@ function _nextRender() {
     childProcess.send(renderMsg);
 }
 
-function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, callback) {
     var cwd = path.resolve(path.dirname(file)) + path.sep;
 
     includePaths = _toAbsolutePaths(cwd, includePaths);
@@ -271,6 +267,7 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         sourceMap: sourceMap,
         _file: file,
         _callback: callback,
+        _compiler: compiler,
         _sourceMapPath: path.resolve(cwd, sourceMap)
     };
 
@@ -278,7 +275,7 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
     _nextRender();
 }
 
-function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, callback) {
     // Convert path separator for windows
     var normalizedFile = normalize(file);
     
@@ -321,11 +318,10 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
         fsextra.outputFileSync(path.join(tmpDirPath, normalize(absPath)), inMemoryText);
     });
     
-    render(tmpFile, tmpIncludePaths, tmpImagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
+    render(tmpFile, tmpIncludePaths, tmpImagePaths, outputStyle, sourceComments, sourceMap, compiler, function (errors, result) {
         // Remove tmpdir path prefix from error paths
         if (errors) {
-            var indexOfTemp,
-                normalizedTempFilePath = path.normalize(tmpFile),
+            var normalizedTempFilePath = path.normalize(tmpFile),
                 normalizedErrorPath;
             
             errors.forEach(function (error) {
@@ -408,7 +404,8 @@ function init(domainManager) {
             {name: "imagePath", type: "string"},
             {name: "outputStyle", type: "string"},
             {name: "sourceComments", type: "boolean"},
-            {name: "sourceMap", type: "string"}
+            {name: "sourceMap", type: "string"},
+            {name: "compiler", type: "string"}
         ]
     );
     
@@ -425,7 +422,8 @@ function init(domainManager) {
             {name: "imagePath", type: "string"},
             {name: "outputStyle", type: "string"},
             {name: "sourceComments", type: "boolean"},
-            {name: "sourceMap", type: "string"}
+            {name: "sourceMap", type: "string"},
+            {name: "compiler", type: "string"}
         ]
     );
     

@@ -28,7 +28,6 @@ define(function (require, exports, module) {
     // Load commonly used modules from Brackets
     var _                   = brackets.getModule("thirdparty/lodash"),
         CodeInspection      = brackets.getModule("language/CodeInspection"),
-        DocumentManager     = brackets.getModule("document/DocumentManager"),
         ExtensionUtils      = brackets.getModule("utils/ExtensionUtils"),
         FileUtils           = brackets.getModule("file/FileUtils"),
         FileSystem          = brackets.getModule("filesystem/FileSystem"),
@@ -52,6 +51,7 @@ define(function (require, exports, module) {
     
     var RE_FILE_EXT     = /\.(sass|scss)$/,
         PREF_ENABLED    = "enabled",
+        PREF_COMPILER   = "compiler",
         PREF_OPTIONS    = "options";
 
     var extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
@@ -85,6 +85,7 @@ define(function (require, exports, module) {
     
     function _render(path, prefs) {
         var deferred = new $.Deferred(),
+            compiler = prefs.compiler,
             options = prefs.options,
             sourceMap = _makeSourceMapRelativeToOutput(prefs);
         
@@ -94,7 +95,8 @@ define(function (require, exports, module) {
                  options.imagePath,
                  options.outputStyle,
                  options.sourceComments,
-                 sourceMap);
+                 sourceMap,
+                 compiler);
         
         renderPromise.then(function (response) {
             deferred.resolve(response.css, _fixSourceMap(response.map, prefs));
@@ -106,6 +108,7 @@ define(function (require, exports, module) {
     function _getPreferencesForFile(file) {
         var prefs = extensionPrefs,
             enabled = prefs.get(PREF_ENABLED, { path: file.fullPath }),
+            compiler = prefs.get(PREF_COMPILER, { path: file.fullPath }) || "libsass",
             options = prefs.get(PREF_OPTIONS, { path: file.fullPath }),
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputDir = (options && options.outputDir),
@@ -137,6 +140,7 @@ define(function (require, exports, module) {
         
         return {
             enabled: enabled,
+            compiler: compiler,
             options: options,
             inputFile: file,
             outputCSSFile: outputFile,
@@ -252,7 +256,6 @@ define(function (require, exports, module) {
         }
 
         var cssFile = prefs.outputCSSFile,
-            options = prefs.options,
             mapFile = prefs.outputSourceMapFile,
             renderPromise;
         
@@ -294,6 +297,7 @@ define(function (require, exports, module) {
             cssFile = prefs.outputCSSFile,
             mapFile = prefs.outputSourceMapFile,
             sourceMap = _makeSourceMapRelativeToOutput(prefs),
+            compiler = prefs.compiler,
             options = prefs.options,
             previewPromise,
             inMemoryFiles = _getInMemoryFiles(docs);
@@ -307,7 +311,8 @@ define(function (require, exports, module) {
             options.imagePath,
             options.outputStyle,
             "map",
-            sourceMap);
+            sourceMap,
+            compiler);
         
         previewPromise.then(function (response) {
             var eventData = {
