@@ -33,8 +33,24 @@ var cp = require("child_process"),
     os = require("os"),
     path = require("path");
 
-// [path]:[line]:[error string]
-var RE_ERROR = /(.*)(:([0-9]+):)(.*)/,
+var RE_LIBSASS_ERROR = {
+        // [path]:[line]:[message]
+        regexp: /(.*)(:([0-9]+):)(.*)/,
+        index: {
+            path: 1,
+            line: 3,
+            message: 4
+        }
+    },
+    RE_RUBY_ERROR = {
+        // Error: [message]\n on line [line] of [path]
+        regexp: /Error: (.*)(\n|\r|\n\r)\s+on line ([0-9]+) of (.*)/i,
+        index: {
+            path: 4,
+            line: 3,
+            message: 1
+        }
+    },
     DOMAIN = "sass-v1.1.4-3";
 
 var _domainManager,
@@ -82,9 +98,15 @@ function tmpdir() {
 }
 
 function parseError(error, file) {
-    var match = error.match(RE_ERROR),
+    var match = error.match(RE_RUBY_ERROR.regexp),
+        index = RE_RUBY_ERROR.index,
         details;
     
+    if (!match) {
+        match = error.match(RE_LIBSASS_ERROR.regexp);
+        index = RE_LIBSASS_ERROR.index;
+    }
+
     if (!match) {
         details = {
             errorString: error,
@@ -95,9 +117,9 @@ function parseError(error, file) {
     } else {
         details = {
             errorString: error,
-            path: match[1],
-            pos: { line: parseInt(match[3], 10) - 1, ch: 0 },
-            message: match[4] && match[4].trim()
+            path: match[index.path],
+            pos: { line: parseInt(match[index.line], 10) - 1, ch: 0 },
+            message: match[index.message] && match[index.message].trim()
         };
     }
 
