@@ -196,25 +196,7 @@ function _nextRender() {
         cleanup();
 
         if (message.css) {
-            // Convert sources array paths to be relative to input file
-            var mapJSON = JSON.parse(message.map),
-                sourcePath,
-                inputParent = path.dirname(renderMsg.file);
-
-            mapJSON.sources.forEach(function (source, index) {
-                // Resolve from working directory (e.g. c:\windows\system32)
-                sourcePath = path.resolve(message._cwd, source);
-                sourcePath = path.relative(inputParent, sourcePath);
-
-                if (path.sep === "\\") {
-                    sourcePath = sourcePath.replace(/\\/g, "/");
-                }
-
-                // Set source path relative to input file parent (sourceRoot)
-                mapJSON.sources[index] = sourcePath;
-            });
-
-            callback(null, { css: message.css, map: mapJSON });
+            callback(null, { css: message.css, map: JSON.parse(message.map) });
         } else if (message.error) {
             callback(parseError(message.error, renderMsg._file));
         }/* else if (message.exitcode) {
