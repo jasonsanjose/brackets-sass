@@ -356,6 +356,9 @@ define(function (require, exports, module) {
     extensionPrefs.definePreference(PREF_OPTIONS, "object")
         .on("change", _prefChangeHandler);
     
+    extensionPrefs.definePreference(PREF_COMPILER, "string", "libsass")
+        .on("change", _prefChangeHandler);
+
     // Public API
     exports.compile = compile;
     exports.preview = preview;
