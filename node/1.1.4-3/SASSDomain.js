@@ -31,27 +31,42 @@ var cp = require("child_process"),
     fs = require("fs"),
     fsextra = require("fs-extra"),
     os = require("os"),
-    path = require("path"),
-    sass = require("node-sass");
+    path = require("path");
 
-// [path]:[line]:[error string]
-var RE_ERROR = /(.*)(:([0-9]+):)(.*)/,
+var RE_LIBSASS_ERROR = {
+        // [path]:[line]:[message]
+        regexp: /(.*)(:([0-9]+):)(.*)/,
+        index: {
+            path: 1,
+            line: 3,
+            message: 4
+        }
+    },
+    RE_RUBY_ERROR = {
+        // Error: [message]\n on line [line] of [path]
+        regexp: /Error: (.*)(\n|\r|\n\r)\s+on line ([0-9]+) of (.*)/i,
+        index: {
+            path: 4,
+            line: 3,
+            message: 1
+        }
+    },
     DOMAIN = "sass-v1.1.4-3";
 
 var _domainManager,
     _tmpdir,
-    _nodeSassProcess,
+    _compilerProcess,
     _currentRenderMsg,
     _queue = [],
     tmpFolders = [];
 
 // Cleanup node-sass child process on quit
 process.on("exit", function () {
-    if (!_nodeSassProcess) {
+    if (!_compilerProcess) {
         return;
     }
 
-    _nodeSassProcess.kill();
+    _compilerProcess.kill();
 });
 
 /**
@@ -83,9 +98,15 @@ function tmpdir() {
 }
 
 function parseError(error, file) {
-    var match = error.match(RE_ERROR),
+    var match = error.match(RE_RUBY_ERROR.regexp),
+        index = RE_RUBY_ERROR.index,
         details;
     
+    if (!match) {
+        match = error.match(RE_LIBSASS_ERROR.regexp);
+        index = RE_LIBSASS_ERROR.index;
+    }
+
     if (!match) {
         details = {
             errorString: error,
@@ -96,9 +117,9 @@ function parseError(error, file) {
     } else {
         details = {
             errorString: error,
-            path: match[1],
-            pos: { line: parseInt(match[3], 10) - 1, ch: 0 },
-            message: match[4] && match[4].trim()
+            path: match[index.path],
+            pos: { line: parseInt(match[index.line], 10) - 1, ch: 0 },
+            message: match[index.message] && match[index.message].trim()
         };
     }
 
@@ -150,18 +171,16 @@ function _toAbsolutePaths(file, pathsArray, tmpRoot) {
 }
 
 function _createChildProcess() {
-    if (!_nodeSassProcess) {
+    if (!_compilerProcess) {
         var renderScript = __dirname + path.sep + "render";
-
-        _nodeSassProcess = cp.fork(renderScript, []);
+        _compilerProcess = cp.fork(renderScript);
 
         // Recreate the process if it dies unexpectedly
-        _nodeSassProcess.on("exit", function () {
-            _nodeSassProcess = null;
+        _compilerProcess.on("exit", function () {
+            _compilerProcess = null;
         });
     }
-
-    return _nodeSassProcess;
+    return _compilerProcess;
 }
 
 function _nextRender() {
@@ -199,26 +218,7 @@ function _nextRender() {
         cleanup();
 
         if (message.css) {
-            // Convert sources array paths to be relative to input file
-            var sourceMapPath = renderMsg._sourceMapPath,
-                mapJSON = JSON.parse(message.map),
-                sourcePath,
-                inputParent = path.dirname(renderMsg.file);
-
-            mapJSON.sources.forEach(function (source, index) {
-                // Resolve from working directory (e.g. c:\windows\system32)
-                sourcePath = path.resolve(message._cwd, source);
-                sourcePath = path.relative(inputParent, sourcePath);
-
-                if (path.sep === "\\") {
-                    sourcePath = sourcePath.replace(/\\/g, "/");
-                }
-
-                // Set source path relative to input file parent (sourceRoot)
-                mapJSON.sources[index] = sourcePath;
-            });
-
-            callback(null, { css: message.css, map: mapJSON });
+            callback(null, { css: message.css, map: JSON.parse(message.map) });
         } else if (message.error) {
             callback(parseError(message.error, renderMsg._file));
         }/* else if (message.exitcode) {
@@ -255,7 +255,7 @@ function _nextRender() {
     childProcess.send(renderMsg);
 }
 
-function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+function render(file, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, callback) {
     var cwd = path.resolve(path.dirname(file)) + path.sep;
 
     includePaths = _toAbsolutePaths(cwd, includePaths);
@@ -271,6 +271,7 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
         sourceMap: sourceMap,
         _file: file,
         _callback: callback,
+        _compiler: compiler,
         _sourceMapPath: path.resolve(cwd, sourceMap)
     };
 
@@ -278,7 +279,7 @@ function render(file, includePaths, imagePaths, outputStyle, sourceComments, sou
     _nextRender();
 }
 
-function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, callback) {
+function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, callback) {
     // Convert path separator for windows
     var normalizedFile = normalize(file);
     
@@ -321,11 +322,10 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
         fsextra.outputFileSync(path.join(tmpDirPath, normalize(absPath)), inMemoryText);
     });
     
-    render(tmpFile, tmpIncludePaths, tmpImagePaths, outputStyle, sourceComments, sourceMap, function (errors, result) {
+    render(tmpFile, tmpIncludePaths, tmpImagePaths, outputStyle, sourceComments, sourceMap, compiler, function (errors, result) {
         // Remove tmpdir path prefix from error paths
         if (errors) {
-            var indexOfTemp,
-                normalizedTempFilePath = path.normalize(tmpFile),
+            var normalizedTempFilePath = path.normalize(tmpFile),
                 normalizedErrorPath;
             
             errors.forEach(function (error) {
@@ -408,7 +408,8 @@ function init(domainManager) {
             {name: "imagePath", type: "string"},
             {name: "outputStyle", type: "string"},
             {name: "sourceComments", type: "boolean"},
-            {name: "sourceMap", type: "string"}
+            {name: "sourceMap", type: "string"},
+            {name: "compiler", type: "string"}
         ]
     );
     
@@ -425,7 +426,8 @@ function init(domainManager) {
             {name: "imagePath", type: "string"},
             {name: "outputStyle", type: "string"},
             {name: "sourceComments", type: "boolean"},
-            {name: "sourceMap", type: "string"}
+            {name: "sourceMap", type: "string"},
+            {name: "compiler", type: "string"}
         ]
     );
     

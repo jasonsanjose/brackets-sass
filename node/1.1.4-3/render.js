@@ -24,24 +24,90 @@
 
 "use strict";
 
-var sass = require("node-sass");
+var cp = require("child_process"),
+    path = require("path"),
+    fs = require("fs-extra"),
+    sass = require("node-sass");
+
+var cwd = process.cwd();
+
+function _success(css, map) {
+    process.send({ css: css, map: map, _cwd: cwd });
+}
+
+function _error(error) {
+    process.send({ error: error.message || error });
+}
 
 process.on("message", function (message) {
-    message.success = function (css, map) {
-        process.send({ css: css, map: map, _cwd: process.cwd() });
-    };
+    if (message._compiler === "ruby") {
+        var tmpCssFile = message.file.replace(/\.s[ac]ss$/, ".css"),
+            command = "sass '" + message.file + "' '" + tmpCssFile + "' --style " + message.outputStyle;
+        message.includePaths.forEach(function (path) {
+            command += " --load-path '" + path + "'";
+        });
+        if (message.sourceComments) {
+            command += " --line-numbers";
+        }
 
-    message.error = function (error) {
-        process.send({ error: error });
-    };
+        cp.exec(command, function (error, stdout, stderr) {
+            if (stderr) {
+                _error(stderr);
+            } else if (error) {
+                process.exit(error);
+            } else {
+                var css,
+                    map;
 
-    sass.render(message);
+                fs.readFile(tmpCssFile, { encoding: "utf-8" }, function (error, content) {
+                    if (error) {
+                        _error(error);
+                    } else if (map) {
+                        _success(content, map);
+                    } else {
+                        css = content;
+                    }
+                });
+                fs.readFile(tmpCssFile + ".map", { encoding: "utf-8" }, function (error, content) {
+                    if (error) {
+                        _error(error);
+                    } else if (css) {
+                        _success(css, content);
+                    } else {
+                        map = content;
+                    }
+                });
+            }
+        });
+    } else { // "libsass"
+        message.success = function (css, map) {
+            // Convert sources array paths to be relative to input file
+            var mapJSON = JSON.parse(map),
+                sourcePath,
+                inputParent = path.dirname(message.file);
+
+            mapJSON.sources.forEach(function (source, index) {
+                // Resolve from working directory (e.g. c:\windows\system32)
+                sourcePath = path.resolve(cwd, source);
+                sourcePath = path.relative(inputParent, sourcePath);
+
+                if (path.sep === "\\") {
+                    sourcePath = sourcePath.replace(/\\/g, "/");
+                }
+
+                // Set source path relative to input file parent (sourceRoot)
+                mapJSON.sources[index] = sourcePath;
+            });
+
+            _success(css, JSON.stringify(mapJSON));
+        };
+        message.error = _error;
+        sass.render(message);
+    }
 });
 
 process.on("exit", function (code) {
     process.send({ exitcode: code });
 });
 
-process.on("uncaughtException", function (err) {
-    process.send({ error: err });
-});
+process.on("uncaughtException", _error);
