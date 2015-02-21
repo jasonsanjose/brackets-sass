@@ -351,7 +351,7 @@ function preview(file, inMemoryFiles, includePaths, imagePaths, outputStyle, sou
 
                     if (path.normalize(absPath) === tmpFile) {
                         // Special case for input file
-                        newSources.push(path.basename(file));
+                        newSources.unshift(path.basename(file));
                     } else {
                         newSources.push(path.relative(path.dirname(file), absPath));
                     }
