@@ -52,6 +52,7 @@ define(function (require, exports, module) {
     var RE_FILE_EXT     = /\.(sass|scss)$/,
         PREF_ENABLED    = "enabled",
         PREF_COMPILER   = "compiler",
+        PREF_COMPASS    = "compass",
         PREF_OPTIONS    = "options";
 
     var extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
@@ -85,7 +86,6 @@ define(function (require, exports, module) {
     
     function _render(path, prefs) {
         var deferred = new $.Deferred(),
-            compiler = prefs.compiler,
             options = prefs.options,
             sourceMap = _makeSourceMapRelativeToOutput(prefs);
         
@@ -96,7 +96,8 @@ define(function (require, exports, module) {
                  options.outputStyle,
                  options.sourceComments,
                  sourceMap,
-                 compiler);
+                 prefs.compiler,
+                 prefs.compass);
         
         renderPromise.then(function (response) {
             deferred.resolve(response.css, _fixSourceMap(response.map, prefs));
@@ -109,6 +110,7 @@ define(function (require, exports, module) {
         var prefs = extensionPrefs,
             enabled = prefs.get(PREF_ENABLED, { path: file.fullPath }),
             compiler = prefs.get(PREF_COMPILER, { path: file.fullPath }) || "libsass",
+            compass = !!prefs.get(PREF_COMPASS, { path: file.fullPath }),
             options = prefs.get(PREF_OPTIONS, { path: file.fullPath }),
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputDir = (options && options.outputDir),
@@ -141,6 +143,7 @@ define(function (require, exports, module) {
         return {
             enabled: enabled,
             compiler: compiler,
+            compass: compass,
             options: options,
             inputFile: file,
             outputCSSFile: outputFile,
@@ -187,6 +190,7 @@ define(function (require, exports, module) {
     
     function _finishScan(file, errors) {
         var path = file.fullPath,
+            prefs = _getPreferencesForFile(file),
             sassFileExtension = FileUtils.getFileExtension(path),
             scanDeferred = _deferredForScannedPath(path);
 
@@ -200,6 +204,15 @@ define(function (require, exports, module) {
 
         errors = errors || [];
         errors = Array.isArray(errors) ? errors : [errors];
+
+        if (prefs.compiler !== "ruby" && prefs.compass) {
+            result.errors.push({
+                message: "Libsass doesn't support Compass yet: something may not work. You should use the Ruby Sass compiler.",
+                pos: {
+                    line: undefined
+                }
+            });
+        }
 
         _.each(errors, function (err) {
             if (typeof err === "string") {
@@ -297,7 +310,6 @@ define(function (require, exports, module) {
             cssFile = prefs.outputCSSFile,
             mapFile = prefs.outputSourceMapFile,
             sourceMap = _makeSourceMapRelativeToOutput(prefs),
-            compiler = prefs.compiler,
             options = prefs.options,
             previewPromise,
             inMemoryFiles = _getInMemoryFiles(docs);
@@ -312,7 +324,8 @@ define(function (require, exports, module) {
             options.outputStyle,
             "map",
             sourceMap,
-            compiler);
+            prefs.compiler,
+            prefs.compass);
         
         previewPromise.then(function (response) {
             var eventData = {
@@ -357,6 +370,9 @@ define(function (require, exports, module) {
         .on("change", _prefChangeHandler);
     
     extensionPrefs.definePreference(PREF_COMPILER, "string", "libsass")
+        .on("change", _prefChangeHandler);
+
+    extensionPrefs.definePreference(PREF_COMPASS, "boolean", false)
         .on("change", _prefChangeHandler);
 
     // Public API
