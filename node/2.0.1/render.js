@@ -114,6 +114,10 @@ ruby.render = function (message) {
         command += " --line-numbers";
     }
     
+    if (message.compass) {
+        command += " --compass";
+    }
+    
     var _finish = function () {
         if (!css && !map) {
             process.send({ error: ruby.parseError(message.file, error) });

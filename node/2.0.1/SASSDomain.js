@@ -218,7 +218,7 @@ function _nextRender() {
     childProcess.send(renderMsg);
 }
 
-function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, callback) {
+function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, compass, callback) {
     var cwd = path.resolve(path.dirname(file)) + path.sep;
 
     includePaths = _toAbsolutePaths(cwd, includePaths);
@@ -226,6 +226,7 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
     
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
+        compass: compass,
         file: path.resolve(file),
         outFile: outFile,
         includePaths: includePaths,
@@ -275,7 +276,7 @@ function _removePathFromErrorString(errorString, path) {
 }
 
 // TODO udpate temp paths for outFile?
-function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, callback) {
+function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, compass, callback) {
     // Convert path separator for windows
     var normalizedFile = normalize(file);
     
@@ -320,7 +321,7 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
         fsextra.outputFileSync(path.join(tmpDirPath, normalize(absPath)), inMemoryText);
     });
     
-    render(tmpFile, tmpOutFile, tmpIncludePaths, tmpImagePaths, outputStyle, sourceComments, sourceMap, compiler, function (errors, result) {
+    render(tmpFile, tmpOutFile, tmpIncludePaths, tmpImagePaths, outputStyle, sourceComments, sourceMap, compiler, compass, function (errors, result) {
         var errorsToProcess = errors || [];
         
         if (result && result.error) {
@@ -419,7 +420,8 @@ function init(domainManager) {
             {name: "outputStyle", type: "string"},
             {name: "sourceComments", type: "boolean"},
             {name: "sourceMap", type: "string"},
-            {name: "compiler", type: "string"}
+            {name: "compiler", type: "string"},
+            {name: "compass", type: "boolean"}
         ]
     );
     
@@ -438,7 +440,8 @@ function init(domainManager) {
             {name: "outputStyle", type: "string"},
             {name: "sourceComments", type: "boolean"},
             {name: "sourceMap", type: "string"},
-            {name: "compiler", type: "string"}
+            {name: "compiler", type: "string"},
+            {name: "compass", type: "boolean"}
         ]
     );
     
