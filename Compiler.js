@@ -35,8 +35,8 @@ define(function (require, exports, module) {
         NodeDomain          = brackets.getModule("utils/NodeDomain");
     
     // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4-3/SASSDomain"),
-        _nodeDomain = new NodeDomain("sass-v1.1.4-3", _domainPath);
+    var _domainPath = ExtensionUtils.getModulePath(module, "node/2.0.1/SASSDomain"),
+        _nodeDomain = new NodeDomain("sass-v2.0.1", _domainPath);
     
     // Initialize temp folder on windows only
     // This is to normalize windows paths instead of using Node's os.tmpdir()
@@ -64,23 +64,29 @@ define(function (require, exports, module) {
             sourceMapFilePath = prefs.outputSourceMapFile.fullPath;
 
         // Output CSS file should be relative to the source map
-        json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
+        if (typeof prefs.options.sourceMap === "string") {
+            json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
+        }
 
         // For some reason, sources are output relative to the CWD
         // Add a sourceRoot to fix
-        json.sourceRoot = PathUtils.makePathRelative(inputFile.parentPath, sourceMapFilePath);
+        // json.sourceRoot = PathUtils.makePathRelative(inputFile.parentPath, sourceMapFilePath);
 
         // TODO read tab/space preference?
         return JSON.stringify(json, null, "  ");
     }
 
     function _makeSourceMapRelativeToOutput(prefs) {
-        var sourceMapPath = prefs.outputSourceMapFile.fullPath,
-            cssFilePath = prefs.outputCSSFile.fullPath;
+        if (typeof prefs.options.sourceMap === "string") {
+            var sourceMapPath = prefs.outputSourceMapFile.fullPath,
+                cssFilePath = prefs.outputCSSFile.fullPath;
 
-        // sourceMap should be relative to the output file
-        // This is only used when generating sourceMappingURL
-        return PathUtils.makePathRelative(sourceMapPath, cssFilePath);
+            // sourceMap should be relative to the output file
+            // This is only used when generating sourceMappingURL
+            return PathUtils.makePathRelative(sourceMapPath, cssFilePath);
+        }
+        
+        return prefs.options.sourceMap;
     }
     
     function _render(path, prefs) {
@@ -90,16 +96,17 @@ define(function (require, exports, module) {
             sourceMap = _makeSourceMapRelativeToOutput(prefs);
         
         var renderPromise = _nodeDomain.exec("render",
-                 path,
-                 options.includePaths,
-                 options.imagePath,
-                 options.outputStyle,
-                 options.sourceComments,
-                 sourceMap,
-                 compiler);
-        
+            path,
+            prefs.outputCSSFile.fullPath,
+            options.includePaths,
+            options.imagePath,
+            options.outputStyle,
+            options.sourceComments,
+            sourceMap,
+            compiler);
+
         renderPromise.then(function (response) {
-            deferred.resolve(response.css, _fixSourceMap(response.map, prefs));
+            deferred.resolve(response.css, _fixSourceMap(response.map, prefs), response.error);
         }, deferred.reject);
         
         return deferred.promise();
@@ -113,6 +120,7 @@ define(function (require, exports, module) {
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputDir = (options && options.outputDir),
             parentPath = file.parentPath,
+            sourceMapPath,
             outputFile;
 
         if (outputDir) {
@@ -132,11 +140,16 @@ define(function (require, exports, module) {
         options = _.defaults(options || {}, {
             outputStyle: "nested",
             sourceComments: true,
-            sourceMap: outputFile.name + ".map"
+            sourceMap: true
         });
 
         // Initialize sourceMap with full path
-        options.sourceMap = outputFile.parentPath + options.sourceMap;
+        if (typeof options.sourceMap === "string") {
+            options.sourceMap = outputFile.parentPath + options.sourceMap;
+            sourceMapPath = options.sourceMap;
+        } else {
+            sourceMapPath = outputFile.parentPath + outputFile.name + ".map";
+        }
         
         return {
             enabled: enabled,
@@ -144,7 +157,7 @@ define(function (require, exports, module) {
             options: options,
             inputFile: file,
             outputCSSFile: outputFile,
-            outputSourceMapFile: FileSystem.getFileForPath(options.sourceMap)
+            outputSourceMapFile: FileSystem.getFileForPath(sourceMapPath)
         };
     }
     
@@ -204,7 +217,7 @@ define(function (require, exports, module) {
         _.each(errors, function (err) {
             if (typeof err === "string") {
                 err = {
-                    message: "Runtime error: " + err,
+                    message: err,
                     pos: {
                         line: -1
                     }
@@ -261,7 +274,7 @@ define(function (require, exports, module) {
         
         renderPromise = _render(sassFile.fullPath, prefs);
         
-        return renderPromise.then(function (css, map) {
+        return renderPromise.then(function (css, map, error) {
             var eventData = {
                     css: {
                         file: cssFile,
@@ -285,7 +298,7 @@ define(function (require, exports, module) {
                 });
             }
             
-            _finishScan(sassFile);
+            _finishScan(sassFile, error);
         }, function (errors) {
             _finishScan(sassFile, errors);
         });
@@ -306,6 +319,7 @@ define(function (require, exports, module) {
         
         previewPromise = _nodeDomain.exec("preview",
             sassFile.fullPath,
+            prefs.outputCSSFile.fullPath,
             inMemoryFiles,
             options.includePaths,
             options.imagePath,
@@ -327,7 +341,7 @@ define(function (require, exports, module) {
             };
             
             $(exports).triggerHandler("sourceMapPreviewEnd", [sassFile, eventData]);
-            _finishScan(sassFile);
+            _finishScan(sassFile, response.error);
             
             deferred.resolve(response.css, response.map);
         }, function (errors) {

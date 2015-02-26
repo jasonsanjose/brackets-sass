@@ -10,3 +10,4 @@
 /node/*/node_modules/node-sass/node_modules/mocha-lcov-reporter
 /node/*/node_modules/node-sass/test
 /node/*/node_modules/node-sass-binaries
+.sass-cache
