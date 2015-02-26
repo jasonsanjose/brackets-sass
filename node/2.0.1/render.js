@@ -24,6 +24,15 @@
 
 "use strict";
 
+process.on("uncaughtException", function (error) {
+    process.send({ error: error.stack || error.message || error });
+});
+
+// HACK make process.sassBinaryName read only
+Object.defineProperty(process, "sassBinaryName", {
+    value: process.platform + "-ia32-node-0.10"
+});
+
 var cp = require("child_process"),
     path = require("path"),
     fs = require("fs-extra"),
@@ -176,8 +185,4 @@ process.on("message", function (message) {
 
 process.on("exit", function (code) {
     process.send({ exitcode: code });
-});
-
-process.on("uncaughtException", function (error) {
-    process.send({ error: error.stack || error.message || error });
 });

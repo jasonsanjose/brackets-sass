@@ -69,9 +69,11 @@ module.exports = function (grunt) {
                             'node/*/SASSDomain.js',
                             '!node/*/node_modules/node-sass-binaries/**',
                             'node/*/node_modules/fs-extra/**',
-                            'node/*/node_modules/node-sass/{package.json,sass.js,binding.gyp}',
-                            'node/*/node_modules/node-sass/bin/**',
-                            'node/*/node_modules/node-sass/node_modules/object-assign/**'
+                            'node/*/node_modules/node-sass/{package.json,binding.gyp}',
+                            'node/*/node_modules/node-sass/bin/node-sass',
+                            'node/*/node_modules/node-sass/node_modules/semver/**',
+                            'node/*/node_modules/node-sass/lib/**',
+                            'node/*/node_modules/node-sass/vendor/**'
                         ]
                     }
                 ]
