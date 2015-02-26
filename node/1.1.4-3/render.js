@@ -49,6 +49,9 @@ process.on("message", function (message) {
         if (message.sourceComments) {
             command += " --line-numbers";
         }
+        if (message.compass) {
+            command += " --compass";
+        }
 
         cp.exec(command, function (error, stdout, stderr) {
             if (stderr) {
