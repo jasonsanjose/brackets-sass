@@ -25,6 +25,8 @@
 define(function (require, exports, module) {
     "use strict";
     
+    var StatusBarUtil = require("StatusBarUtil");
+    
     // Load commonly used modules from Brackets
     var _                   = brackets.getModule("thirdparty/lodash"),
         CodeInspection      = brackets.getModule("language/CodeInspection"),
@@ -32,7 +34,8 @@ define(function (require, exports, module) {
         FileUtils           = brackets.getModule("file/FileUtils"),
         FileSystem          = brackets.getModule("filesystem/FileSystem"),
         PreferencesManager  = brackets.getModule("preferences/PreferencesManager"),
-        NodeDomain          = brackets.getModule("utils/NodeDomain");
+        NodeDomain          = brackets.getModule("utils/NodeDomain"),
+        ProjectManager      = brackets.getModule("project/ProjectManager");
     
     // Boilerplate to load NodeDomain
     var _domainPath = ExtensionUtils.getModulePath(module, "node/2.0.1/SASSDomain"),
@@ -53,6 +56,7 @@ define(function (require, exports, module) {
         PREF_ENABLED    = "enabled",
         PREF_COMPILER   = "compiler",
         PREF_COMPASS    = "compass",
+        PREF_TIMEOUT    = "timeout",
         PREF_OPTIONS    = "options";
 
     var extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
@@ -156,7 +160,7 @@ define(function (require, exports, module) {
         return {
             enabled: enabled,
             compiler: compiler,
-            compass: compass,
+            compass: compass ? { projectRoot: ProjectManager.getProjectRoot().fullPath } : false,
             options: options,
             inputFile: file,
             outputCSSFile: outputFile,
@@ -287,6 +291,8 @@ define(function (require, exports, module) {
         
         renderPromise = _render(sassFile.fullPath, prefs);
         
+        StatusBarUtil.showBusyStatus("Compiling " + PathUtils.makePathRelative(sassFile.fullPath, ProjectManager.getProjectRoot().fullPath));
+        
         return renderPromise.then(function (css, map, error) {
             var eventData = {
                     css: {
@@ -314,18 +320,29 @@ define(function (require, exports, module) {
             _finishScan(sassFile, error);
         }, function (errors) {
             _finishScan(sassFile, errors);
+        }).always(function () {
+            StatusBarUtil.hideBusyStatus();
         });
     }
     
     function preview(sassFile, docs) {
         var deferred = new $.Deferred(),
-            prefs = _getPreferencesForFile(sassFile),
-            cssFile = prefs.outputCSSFile,
+            prefs = _getPreferencesForFile(sassFile);
+        
+        // TODO support compiler errors with compass
+        // Requires at least config.rb and maybe other files copied to temp?
+        if (prefs.compass) {
+            _finishScan(sassFile, []);
+            return deferred.resolve().promise();
+        }
+        
+        var cssFile = prefs.outputCSSFile,
             mapFile = prefs.outputSourceMapFile,
             sourceMap = _makeSourceMapRelativeToOutput(prefs),
             options = prefs.options,
             previewPromise,
-            inMemoryFiles = _getInMemoryFiles(docs);
+            inMemoryFiles = _getInMemoryFiles(docs),
+            compass = prefs.compass;
         
         $(exports).triggerHandler("sourceMapPreviewStart", [sassFile, cssFile]);
         
@@ -340,6 +357,8 @@ define(function (require, exports, module) {
             sourceMap,
             prefs.compiler,
             prefs.compass);
+        
+        StatusBarUtil.showBusyStatus("Checking for errors");
         
         previewPromise.then(function (response) {
             var eventData = {
@@ -362,6 +381,8 @@ define(function (require, exports, module) {
             _finishScan(sassFile, errors);
             
             deferred.reject(errors);
+        }).always(function () {
+            StatusBarUtil.hideBusyStatus();
         });
         
         return deferred.promise();
@@ -374,6 +395,7 @@ define(function (require, exports, module) {
     function _prefChangeHandler(event) {
         // TODO compile all files?
         // _compileWithPreferences();
+        _nodeDomain.exec("setCompilerTimeout", extensionPrefs.get(PREF_TIMEOUT));
     }
         
     // Register preferences
@@ -388,6 +410,11 @@ define(function (require, exports, module) {
 
     extensionPrefs.definePreference(PREF_COMPASS, "boolean", false)
         .on("change", _prefChangeHandler);
+
+    extensionPrefs.definePreference(PREF_TIMEOUT, "number", -1)
+        .on("change", _prefChangeHandler);
+    
+    _prefChangeHandler();
 
     // Public API
     exports.compile = compile;

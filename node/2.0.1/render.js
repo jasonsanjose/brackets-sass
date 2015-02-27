@@ -36,15 +36,16 @@ Object.defineProperty(process, "sassBinaryName", {
 var cp = require("child_process"),
     path = require("path"),
     fs = require("fs-extra"),
-    sass = require("node-sass");
+    sass = require("node-sass"),
+    rubyChildProcess;
 
 var ruby = {},
     RE_RUBY_ERROR = {
         // Error: [message]\n on line [line] of [path]
-        regexp: /Error: (.*)(\n|\r|\n\r)\s+on line ([0-9]+) of (.*)/i,
+        regexp: /Error: ([\s\S]*)on line ([0-9]+) of (.*)/i,
         index: {
-            path: 4,
-            line: 3,
+            path: 3,
+            line: 2,
             message: 1
         }
     },
@@ -58,10 +59,6 @@ var ruby = {},
         }
     };
 
-function _log(message) {
-    process.send({ log: message });
-}
-
 function _success(result) {
     process.send(result);
 }
@@ -73,15 +70,18 @@ function _error(error) {
 ruby.parseError = function (file, errorString) {
     var match = errorString.match(RE_RUBY_ERROR.regexp),
         index = RE_RUBY_ERROR.index,
+        type = "error",
         details;
     
     if (!match) {
         match = errorString.match(RE_RUBY_WARNING.regexp);
         index = RE_RUBY_WARNING.index;
+        type = "warning";
     }
 
     if (!match) {
         details = {
+            type: "error",
             errorString: errorString,
             path: file,
             pos: { line: 0, ch: 0 },
@@ -89,6 +89,7 @@ ruby.parseError = function (file, errorString) {
         };
     } else {
         details = {
+            type: type,
             errorString: errorString,
             path: match[index.path],
             pos: { line: parseInt(match[index.line], 10) - 1, ch: 0 },
@@ -101,31 +102,43 @@ ruby.parseError = function (file, errorString) {
 
 ruby.render = function (message) {
     var tmpCssMapFile = message.outFile + ".map",
-        command = "sass '" + message.file + "' '" + message.outFile + "' --style " + message.outputStyle,
+        command = "sass '" + message.file + "'",
+        options = {},
         css,
         map,
         error;
-    
-    message.includePaths.forEach(function (path) {
-        command += " --load-path '" + path + "'";
-    });
     
     if (message.sourceComments) {
         command += " --line-numbers";
     }
     
+    command += " --style " + message.outputStyle;
+    
+    // Save output
+    command += " '" + message.outFile + "'";
+
     if (message.compass) {
+        // Enable compass
         command += " --compass";
+        
+        // defer to <project root>/config.rb when using compass
+        options.cwd = message.compass.projectRoot;
+    } else {
+        message.includePaths.forEach(function (path) {
+            command += " --load-path '" + path + "'";
+        });
     }
     
     var _finish = function () {
-        if (!css && !map) {
-            process.send({ error: ruby.parseError(message.file, error) });
+        if (error && error.type === "error") {
+            process.send({
+                error: error
+            });
         } else if (css && map) {
             message.success({
                 css: css,
                 map: map,
-                error: ruby.parseError(message.file, error)
+                error: error // !error || error.type === "warning"
             });
         }
     };
@@ -133,7 +146,7 @@ ruby.render = function (message) {
     var _readTempFile = function (file, callback) {
         fs.readFile(file, { encoding: "utf-8" }, function (fileError, content) {
             if (fileError) {
-                error = error || fileError;
+                error = error || ruby.parseError(message.file, fileError);
                 _finish();
             } else {
                 fs.remove(message.outFile, function () {
@@ -143,20 +156,26 @@ ruby.render = function (message) {
             }
         });
     };
+    
+    // log details to brackets
+    process.send({
+        message: message,
+        command: command
+    });
 
-    cp.exec(command, function (execError, stdout, stderr) {
+    rubyChildProcess = cp.exec(command, options, function (execError, stdout, stderr) {
         if (stderr) {
-            error = stderr;
+            error = ruby.parseError(message.file, stderr);
         } else if (execError) {
             process.exit(execError);
         }
         
         _readTempFile(message.outFile, function (content) {
             css = content;
-        });
         
-        _readTempFile(tmpCssMapFile, function (content) {
-            map = content;
+            _readTempFile(tmpCssMapFile, function (content) {
+                map = content;
+            });
         });
     });
 };
@@ -188,5 +207,9 @@ process.on("message", function (message) {
 });
 
 process.on("exit", function (code) {
+    if (rubyChildProcess) {
+        rubyChildProcess.kill();
+    }
+    
     process.send({ exitcode: code });
 });

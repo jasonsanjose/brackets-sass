@@ -40,6 +40,7 @@ var _domainManager,
     _compilerProcess,
     _currentRenderMsg,
     _queue = [],
+    _timeout = -1,
     tmpFolders = [];
 
 // Cleanup node-sass child process on quit
@@ -152,9 +153,11 @@ function _nextRender() {
         timeout;
 
     // Set timeout
-    timeout = setTimeout(function () {
-        childProcess.kill();
-    }, 10000);
+    if (_timeout >= 0) {
+        timeout = setTimeout(function () {
+            childProcess.kill();
+        }, _timeout);
+    }
 
     function cleanup() {
         _currentRenderMsg = null;
@@ -168,9 +171,12 @@ function _nextRender() {
     }
 
     messageListener = function (message) {
-        if (message.log) {
-            console.log(message.log);
-        } else if (message.css) {
+        if (message.command) {
+            console.log(message.command);
+            console.log(message.message);
+        }
+        
+        if (message.css) {
             cleanup();
             
             callback(null, {
@@ -211,7 +217,7 @@ function _nextRender() {
         }*/
     };
 
-    childProcess.once("message", messageListener);
+    childProcess.on("message", messageListener);
     childProcess.once("error", errorListener);
     childProcess.once("exit", exitListener);
 
@@ -223,6 +229,10 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
 
     includePaths = _toAbsolutePaths(cwd, includePaths);
     imagePaths = _toAbsolutePaths(cwd, imagePaths);
+    
+    if (compass) {
+        compass.projectRoot = normalize(compass.projectRoot);
+    }
     
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
@@ -297,6 +307,20 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
     // Copy files to temp folder
     //fsextra.copySync(originalParent, tmpFolder);
     fsextra.copySync(file, tmpFile);
+    
+    // TODO how to support compass and the config.rb file?
+    /*
+    if (compass.projectRoot) {
+        var root = normalize(compass.projectRoot),
+            configRb = "config.rb",
+            rootConfigRb = root + path.sep + configRb,
+            tmpRoot = path.join(tmpDirPath, path.dirname(root)),
+            tmpConfigRb = tmpRoot + path.sep + configRb;
+        
+        fsextra.copySync(path.dirname(root), tmpConfigRb);
+        compass = true;
+    }
+    */
     
     // Convert include and image paths to absolute paths relative to parent folder
     var tmpIncludePaths = _toAbsolutePaths(originalParent, includePaths, tmpFolder),
@@ -397,6 +421,11 @@ function setTempDir(pathToDir, callback) {
     fsextra.mkdirp(_tmpdir, callback);
 }
 
+function setCompilerTimeout(timeout) {
+    timeout = typeof timeout === "number" ? timeout : -1;
+    _timeout = timeout;
+}
+
 /**
  * Initialize the "childProcess" domain.
  * The fileWatcher domain handles watching and un-watching directories.
@@ -462,6 +491,17 @@ function init(domainManager) {
         "Creates a directory. If the parent hierarchy doesn't exist, it's created. Like mkdir -p.",
         [
             {name: "path", type: "string"}
+        ]
+    );
+    
+    domainManager.registerCommand(
+        DOMAIN,
+        "setCompilerTimeout",
+        setCompilerTimeout,
+        false,
+        "Defines a compiler timeout",
+        [
+            {name: "timeout", type: "number"}
         ]
     );
     
