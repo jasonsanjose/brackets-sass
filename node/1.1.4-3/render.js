@@ -92,6 +92,10 @@ process.on("message", function (message) {
             mapJSON.sources.forEach(function (source, index) {
                 // Resolve from working directory (e.g. c:\windows\system32)
                 sourcePath = path.resolve(cwd, source);
+                // See https://github.com/jasonsanjose/brackets-sass/issues/89
+                if (process.platform === "win32") {
+                    sourcePath = sourcePath.replace(/^([a-z]:\\){1,2}/i, "$1");
+                }
                 sourcePath = path.relative(inputParent, sourcePath);
 
                 if (path.sep === "\\") {
