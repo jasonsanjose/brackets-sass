@@ -229,16 +229,16 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
 
     includePaths = _toAbsolutePaths(cwd, includePaths);
     imagePaths = _toAbsolutePaths(cwd, imagePaths);
-    
+
     if (compass) {
-        compass.projectRoot = normalize(compass.projectRoot);
+        compass.projectRoot = path.resolve(compass.projectRoot);
     }
     
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
         compass: compass,
         file: path.resolve(file),
-        outFile: outFile,
+        outFile: path.resolve(outFile),
         includePaths: includePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
@@ -254,16 +254,29 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
         if (map && Array.isArray(map.sources)) {
             var newSources = [],
                 outFolder = path.dirname(outFile),
+                newSource,
                 absPath;
 
-            // Move input file to the top
             map.sources.forEach(function (source) {
                 absPath = path.resolve(outFolder, source);
 
-                if (path.normalize(absPath) === file) {
-                    newSources.unshift(path.relative(outFolder, file));
+                // See https://github.com/jasonsanjose/brackets-sass/issues/89
+                if (process.platform === "win32") {
+                    absPath = absPath.replace(/^([a-z]:\\){1,2}/i, "$1");
+                }
+
+                newSource = path.relative(outFolder, absPath);
+
+                // Replace backslashes
+                if (path.sep === "\\") {
+                    newSource = newSource.replace(/\\/g, "/");
+                }
+
+                if (absPath === file) {
+                    // Move input file to the top
+                    newSources.unshift(newSource);
                 } else {
-                    newSources.push(path.relative(outFolder, absPath));
+                    newSources.push(newSource);
                 }
             });
 
@@ -290,10 +303,10 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
     // Convert path separator for windows
     var normalizedFile = normalize(file);
     
-    var originalParent = path.dirname(normalizedFile),
+    var originalParent = path.dirname(file),
         md5 = crypto.createHash("md5").update(file).digest("hex"),
         tmpDirPath = path.join(tmpdir(), md5),
-        tmpFolder = path.join(tmpDirPath, originalParent),
+        tmpFolder = path.join(tmpDirPath, normalize(originalParent)),
         tmpOutFolder = path.join(tmpDirPath, path.dirname(normalize(outFile))),
         tmpFile = tmpFolder + path.sep + path.basename(file),
         tmpOutFile = tmpOutFolder + path.sep + path.basename(outFile);

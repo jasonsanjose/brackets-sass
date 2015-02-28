@@ -108,14 +108,14 @@ ruby.render = function (message) {
         map,
         error;
     
+    // Save output
+    command += " '" + message.outFile + "'";
+    
     if (message.sourceComments) {
         command += " --line-numbers";
     }
     
     command += " --style " + message.outputStyle;
-    
-    // Save output
-    command += " '" + message.outFile + "'";
 
     if (message.compass) {
         // Enable compass
