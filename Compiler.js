@@ -73,6 +73,11 @@ define(function (require, exports, module) {
             json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
         }
 
+        // Replace backslashes in paths
+        json.sources = json.sources.map(function (source) {
+            return source.replace(/\\/g, "/");
+        });
+
         // For some reason, sources are output relative to the CWD
         // Add a sourceRoot to fix
         // json.sourceRoot = PathUtils.makePathRelative(inputFile.parentPath, sourceMapFilePath);

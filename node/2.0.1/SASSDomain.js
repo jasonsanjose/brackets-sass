@@ -33,17 +33,18 @@ var cp = require("child_process"),
     os = require("os"),
     path = require("path");
 
-var DOMAIN = "sass-v2.0.1";
+var DOMAIN = "sass-v2.0.1",
+    RE_NODE_SASS_WIN_DRIVE = /([a-z]:\\([a-z]:\\))/i;
 
 var _domainManager,
     _tmpdir,
     _compilerProcess,
     _currentRenderMsg,
     _queue = [],
-    _timeout = -1,
+    _timeout = 10000,
     tmpFolders = [];
 
-// Cleanup node-sass child process on quit
+// Cleanup compiler child process on quit
 process.on("exit", function () {
     if (!_compilerProcess) {
         return;
@@ -204,7 +205,7 @@ function _nextRender() {
         cleanup();
 
         if (code === null) {
-            var errString = "Fatal node-sass error, signal=" + signal;
+            var errString = "Fatal compiler error, signal=" + signal;
 
             callback([{
                 errorString: errString,
@@ -227,6 +228,11 @@ function _nextRender() {
 function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComments, sourceMap, compiler, compass, callback) {
     var cwd = path.resolve(path.dirname(file)) + path.sep;
 
+    // Normalize input/output (but don't drop drive letter)
+    file = path.normalize(file);
+    outFile = path.normalize(outFile);
+
+    // Include paths are usually relative paths, convert to absolute
     includePaths = _toAbsolutePaths(cwd, includePaths);
     imagePaths = _toAbsolutePaths(cwd, imagePaths);
 
@@ -237,14 +243,13 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
     // Paths are relative to current working directory (file parent folder)
     var renderMsg = {
         compass: compass,
-        file: path.resolve(file),
-        outFile: path.resolve(outFile),
+        file: file,
+        outFile: outFile,
         includePaths: includePaths,
         imagePaths: imagePaths,
         outputStyle: outputStyle,
         sourceComments: sourceComments,
         sourceMap: sourceMap,
-        _file: file,
         _compiler: compiler
     };
     
@@ -257,21 +262,26 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
                 newSource,
                 absPath;
 
+            // compilers output relative source paths (if possible)
+            // using forward slash "/" on all platforms
             map.sources.forEach(function (source) {
-                absPath = path.resolve(outFolder, source);
+                // TODO refactor into implementation specific compiler modules
+                // On windows, if the output file and source are on different
+                // drives, weird things happen....
+                // Ruby
+                //     file:///D:/bourbon-example/scss/partial.scss
+                // node-sass
+                //     ../../../../../../../../../../D:/bourbon-example/scss/partial.scss
+                newSource = source.replace("file:///", "");
+                absPath = path.resolve(outFolder, newSource);
 
-                // See https://github.com/jasonsanjose/brackets-sass/issues/89
-                if (process.platform === "win32") {
-                    absPath = absPath.replace(/^([a-z]:\\){1,2}/i, "$1");
+                // node-sass resolves to C:\D:\bourbon-example\scss\partial.scss
+                // Remove extra drive letter
+                if (absPath.match(RE_NODE_SASS_WIN_DRIVE)) {
+                    newSource = absPath.replace(RE_NODE_SASS_WIN_DRIVE, "$2", "$1");
                 }
 
-                newSource = path.relative(outFolder, absPath);
-
-                // Replace backslashes
-                if (path.sep === "\\") {
-                    newSource = newSource.replace(/\\/g, "/");
-                }
-
+                // file is a normalized path (with backslash on windows)
                 if (absPath === file) {
                     // Move input file to the top
                     newSources.unshift(newSource);
@@ -306,10 +316,11 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
     var originalParent = path.dirname(file),
         md5 = crypto.createHash("md5").update(file).digest("hex"),
         tmpDirPath = path.join(tmpdir(), md5),
-        tmpFolder = path.join(tmpDirPath, normalize(originalParent)),
-        tmpOutFolder = path.join(tmpDirPath, path.dirname(normalize(outFile))),
-        tmpFile = tmpFolder + path.sep + path.basename(file),
-        tmpOutFile = tmpOutFolder + path.sep + path.basename(outFile);
+        tmpFolder = path.join(tmpDirPath, normalize(originalParent)), // <tmpdir>/<path without drive letter>
+        outFolder = path.dirname(path.normalize(outFile)), // keep drive letter
+        tmpOutFolder = path.join(tmpDirPath, normalize(outFolder)), // drop drive letter
+        tmpFile = tmpFolder + path.sep + path.basename(file), // <tmpdir>/<path without drive letter>/<input file name>
+        tmpOutFile = tmpOutFolder + path.sep + path.basename(outFile); // <tmpdir>/<path without drive letter>/<out file>
     
     // Delete temp files if they exist
     fsextra.removeSync(tmpDirPath);
@@ -400,7 +411,7 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
                         newSources.push(path.relative(tmpOutFolder, absPath));
                     } else {
                         // Files found in the original project location
-                        newSources.push(path.relative(originalParent, absPath));
+                        newSources.push(path.relative(outFolder, absPath));
                     }
                 });
 
