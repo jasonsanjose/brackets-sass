@@ -122,6 +122,7 @@ ruby.render = function (message) {
         command += " --compass";
         
         // defer to <project root>/config.rb when using compass
+        // FIXME how to deal with relative paths in config.rb from temp dir?
         options.cwd = message.compass.projectRoot;
     } else {
         message.includePaths.forEach(function (path) {
@@ -149,10 +150,8 @@ ruby.render = function (message) {
                 error = error || ruby.parseError(message.file, fileError);
                 _finish();
             } else {
-                fs.remove(message.outFile, function () {
-                    callback(content);
-                    _finish();
-                });
+                callback(content);
+                _finish();
             }
         });
     };

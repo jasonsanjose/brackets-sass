@@ -116,7 +116,7 @@ define(function (require, exports, module) {
             prefs.compass);
 
         renderPromise.then(function (response) {
-            deferred.resolve(response.css, _fixSourceMap(response.map, prefs), response.error);
+            deferred.resolve(response.css, _fixSourceMap(response.map, prefs), response.error, response._compassOutFile);
         }, deferred.reject);
         
         return deferred.promise();
@@ -298,7 +298,14 @@ define(function (require, exports, module) {
         
         StatusBarUtil.showBusyStatus("Compiling " + PathUtils.makePathRelative(sassFile.fullPath, ProjectManager.getProjectRoot().fullPath));
         
-        return renderPromise.then(function (css, map, error) {
+        return renderPromise.then(function (css, map, error, _compassOutFile) {
+            // HACK deal with compass output
+            if (_compassOutFile) {
+                _compassOutFile = FileUtils.convertWindowsPathToUnixPath(_compassOutFile);
+                cssFile = FileSystem.getFileForPath(_compassOutFile);
+                mapFile = FileSystem.getFileForPath(_compassOutFile + ".map");
+            }
+
             var eventData = {
                     css: {
                         file: cssFile,
@@ -312,7 +319,6 @@ define(function (require, exports, module) {
             
             if (map) {
                 _mkdirp(mapFile.parentPath).done(function () {
-                    // TODO relative paths in sourceMap?
                     FileUtils.writeText(mapFile, map, true);
                 
                     eventData.sourceMap = {
@@ -334,8 +340,9 @@ define(function (require, exports, module) {
         var deferred = new $.Deferred(),
             prefs = _getPreferencesForFile(sassFile);
         
+        // TODO warnings for compass that live preview isn't supported yet
         // TODO support compiler errors with compass
-        // Requires at least config.rb and maybe other files copied to temp?
+        // Requires changes to config.rb?
         if (prefs.compass) {
             _finishScan(sassFile, []);
             return deferred.resolve().promise();

@@ -27,6 +27,7 @@
 "use strict";
 
 var cp = require("child_process"),
+    compassOptions = require("compass-options"),
     crypto = require("crypto"),
     fs = require("fs"),
     fsextra = require("fs-extra"),
@@ -238,6 +239,22 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
 
     if (compass) {
         compass.projectRoot = path.resolve(compass.projectRoot);
+
+        // Compass assumes input file name is the same as output
+        var outputFileName = path.basename(file).replace(/\.s[ac]ss$/, ".css"),
+            outputDir;
+
+        // Parse config.rb and use css_dir determine outFile
+        // TODO support css_path
+        // TODO move this to client side code?
+        var compassConfig = compassOptions.paths({ config: path.join(compass.projectRoot, "config.rb") });
+        
+        // FIXME compass-options packages uses "css" as default instead of "stylesheets"
+        // see http://compass-style.org/help/documentation/configuration-reference/
+        outputDir = compassConfig.css;
+        
+        // outputFileName swaps .sass/.scss with .css
+        outFile = path.join(compass.projectRoot, outputDir, outputFileName);
     }
     
     // Paths are relative to current working directory (file parent folder)
@@ -295,6 +312,8 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
 
             // Send updated JSON string
             result.map = map;
+
+            result._compassOutFile = compass && outFile;
         }
         
         callback.call(null, errors, result);
@@ -329,22 +348,24 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
     tmpFolders.push(tmpDirPath);
     
     // Copy files to temp folder
-    //fsextra.copySync(originalParent, tmpFolder);
     fsextra.copySync(file, tmpFile);
     
-    // TODO how to support compass and the config.rb file?
-    /*
     if (compass.projectRoot) {
-        var root = normalize(compass.projectRoot),
-            configRb = "config.rb",
-            rootConfigRb = root + path.sep + configRb,
-            tmpRoot = path.join(tmpDirPath, path.dirname(root)),
+        var configRb = "config.rb",
+            rootConfigRb = path.resolve(compass.projectRoot + path.sep + configRb),
+            tmpRoot = path.join(tmpDirPath, normalize(path.dirname(rootConfigRb))),
             tmpConfigRb = tmpRoot + path.sep + configRb;
         
-        fsextra.copySync(path.dirname(root), tmpConfigRb);
-        compass = true;
+        try {
+            // FIXME Unused, see render.js changing cwd to original project path
+            fsextra.copySync(rootConfigRb, tmpConfigRb);
+        } catch (err) {
+            console.log("Missing config.rb file at " + rootConfigRb);
+        }
+
+        // FIXME copy source dirs from config.rb to temp?
+        //compass.projectRoot = tmpRoot;
     }
-    */
     
     // Convert include and image paths to absolute paths relative to parent folder
     var tmpIncludePaths = _toAbsolutePaths(originalParent, includePaths, tmpFolder),
