@@ -69,6 +69,7 @@ module.exports = function (grunt) {
                             'node/*/SASSDomain.js',
                             '!node/*/node_modules/node-sass-binaries/**',
                             'node/*/node_modules/fs-extra/**',
+                            'node/*/node_modules/compass-options/**',
                             'node/*/node_modules/node-sass/{package.json,binding.gyp}',
                             'node/*/node_modules/node-sass/bin/node-sass',
                             'node/*/node_modules/node-sass/node_modules/semver/**',
