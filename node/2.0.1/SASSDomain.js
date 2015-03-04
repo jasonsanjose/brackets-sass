@@ -324,7 +324,7 @@ function render(file, outFile, includePaths, imagePaths, outputStyle, sourceComm
 }
 
 function _removePathFromErrorString(errorString, path) {
-    return errorString.replace(new RegExp(path, "g"), "");
+    return errorString.replace(path, "");
 }
 
 // TODO udpate temp paths for outFile?
@@ -399,16 +399,15 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
         
         // Remove tmpdir path prefix from error paths
         if (errorsToProcess.length) {
-            var normalizedTempFilePath = path.normalize(tmpFile),
-                normalizedErrorPath;
+            var normalizedTempFilePath = path.normalize(tmpFile);
             
             errorsToProcess.forEach(function (error) {
-                normalizedErrorPath = path.normalize(error.path);
+                error.path = path.normalize(error.path);
                 
-                if (normalizedErrorPath === normalizedTempFilePath) {
+                if (error.path === normalizedTempFilePath) {
                     error.path = file;
                 } else {
-                    error.path = _removePathFromErrorString(error.path, tmpDirPath);
+                    error.path = path.resolve(originalParent, path.relative(tmpFolder, error.path));
                 }
                 
                 error.message = _removePathFromErrorString(error.message, tmpDirPath);

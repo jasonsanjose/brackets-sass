@@ -237,6 +237,10 @@ define(function (require, exports, module) {
         }
 
         _.each(errors, function (err) {
+            if (err && err.path) {
+                err.path = FileUtils.convertWindowsPathToUnixPath(err.path);
+            }
+            
             if (typeof err === "string") {
                 err = {
                     message: err,
@@ -250,8 +254,8 @@ define(function (require, exports, module) {
                 var clonedError = _.clone(err);
                 clonedError.pos = _.clone(err.pos);
 
-                partialErrorMap[clonedError.path] = partialErrorMap[clonedError.path] || [];
-                partialErrorMap[clonedError.path].push(clonedError);
+                partialErrorMap[err.path] = partialErrorMap[err.path] || [];
+                partialErrorMap[err.path].push(clonedError);
 
                 // Omit position if the file path doesn't match
                 err.pos.line = undefined;
