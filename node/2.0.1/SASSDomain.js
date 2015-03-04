@@ -408,7 +408,7 @@ function preview(file, outFile, inMemoryFiles, includePaths, imagePaths, outputS
                 if (normalizedErrorPath === normalizedTempFilePath) {
                     error.path = file;
                 } else {
-                    error.path = path.resolve(tmpFolder, error.path);
+                    error.path = _removePathFromErrorString(error.path, tmpDirPath);
                 }
                 
                 error.message = _removePathFromErrorString(error.message, tmpDirPath);

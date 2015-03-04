@@ -250,10 +250,6 @@ define(function (require, exports, module) {
                 var clonedError = _.clone(err);
                 clonedError.pos = _.clone(err.pos);
 
-                // FIXME determine when to add underscore prefix to partials
-                // HACK libsass errors on partials don't include the file extension!
-                clonedError.path += sassFileExtension;
-
                 partialErrorMap[clonedError.path] = partialErrorMap[clonedError.path] || [];
                 partialErrorMap[clonedError.path].push(clonedError);
 
@@ -271,9 +267,14 @@ define(function (require, exports, module) {
         scanDeferred.resolve(result);
 
         // Resolve promises for partials
-        _.each(partialErrorMap, function (partialErrors, partialPath) {
-            _deferredForScannedPath(partialPath).resolve({
-                errors: partialErrors,
+        _.each(scannedFileMap, function (deferred, partialPath) {
+            // Only deal with pending files
+            if (deferred.state() !== "pending") {
+                return;
+            }
+            
+            deferred.resolve({
+                errors: partialErrorMap[partialPath] || [],
                 aborted: false
             });
         });
