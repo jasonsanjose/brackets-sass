@@ -211,7 +211,7 @@ define(function (require, exports, module) {
             // If the promise is resolved, errors were cached when the file was
             // compiled as a partial.
             if (errorPromise.state() === "pending") {
-                docs = docs.unshift(DocumentManager.getOpenDocumentForPath(path));
+                docs.unshift(DocumentManager.getOpenDocumentForPath(path));
                 Compiler.preview(inputFile, docs);
             }
             
