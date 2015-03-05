@@ -1,7 +1,7 @@
 {
   "name": "jasonsanjose.brackets-sass",
   "title": "Brackets SASS",
-  "homepage": "https://github.com/jasonsanjose/brackets-sass",
+  "homepage": "https://github.com/jasonsanjose/brackets-sass/releases/tag/2.0.1",
   "author": "Jason San Jose (https://github.com/jasonsanjose)",
   "repository": {
     "type" : "git",
@@ -12,7 +12,7 @@
   "engines": {
     "brackets": ">=0.38"
   },
-  "description": "Compiles SASS *.sass/*.scss files when changed. Updates styles during Live Preview. Experimental support for Quick Edit.",
+  "description": "***IMPORTANT*** Read \"More info...\" if you have issues removing or installing. Compiles SASS *.sass/*.scss files when changed. Updates styles during Live Preview. Experimental support for Quick Edit.",
   "keywords": ["sass", "scss", "live", "preview", "compile", "compiler", "preprocess", "preprocessor", "libsass", "node-sass"],
   "devDependencies": {
     "grunt": "0.4.1",
