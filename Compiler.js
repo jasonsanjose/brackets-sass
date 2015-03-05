@@ -25,6 +25,8 @@
 define(function (require, exports, module) {
     "use strict";
     
+    var StatusBarUtil = require("StatusBarUtil");
+    
     // Load commonly used modules from Brackets
     var _                   = brackets.getModule("thirdparty/lodash"),
         CodeInspection      = brackets.getModule("language/CodeInspection"),
@@ -32,11 +34,12 @@ define(function (require, exports, module) {
         FileUtils           = brackets.getModule("file/FileUtils"),
         FileSystem          = brackets.getModule("filesystem/FileSystem"),
         PreferencesManager  = brackets.getModule("preferences/PreferencesManager"),
-        NodeDomain          = brackets.getModule("utils/NodeDomain");
+        NodeDomain          = brackets.getModule("utils/NodeDomain"),
+        ProjectManager      = brackets.getModule("project/ProjectManager");
     
     // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/1.1.4-3/SASSDomain"),
-        _nodeDomain = new NodeDomain("sass-v1.1.4-3", _domainPath);
+    var _domainPath = ExtensionUtils.getModulePath(module, "node/2.0.1/SASSDomain"),
+        _nodeDomain = new NodeDomain("sass-v2.0.1", _domainPath);
     
     // Initialize temp folder on windows only
     // This is to normalize windows paths instead of using Node's os.tmpdir()
@@ -53,6 +56,7 @@ define(function (require, exports, module) {
         PREF_ENABLED    = "enabled",
         PREF_COMPILER   = "compiler",
         PREF_COMPASS    = "compass",
+        PREF_TIMEOUT    = "timeout",
         PREF_OPTIONS    = "options";
 
     var extensionPrefs = PreferencesManager.getExtensionPrefs("sass"),
@@ -65,23 +69,34 @@ define(function (require, exports, module) {
             sourceMapFilePath = prefs.outputSourceMapFile.fullPath;
 
         // Output CSS file should be relative to the source map
-        json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
+        if (typeof prefs.options.sourceMap === "string") {
+            json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
+        }
+
+        // Replace backslashes in paths
+        json.sources = json.sources.map(function (source) {
+            return source.replace(/\\/g, "/");
+        });
 
         // For some reason, sources are output relative to the CWD
         // Add a sourceRoot to fix
-        json.sourceRoot = PathUtils.makePathRelative(inputFile.parentPath, sourceMapFilePath);
+        // json.sourceRoot = PathUtils.makePathRelative(inputFile.parentPath, sourceMapFilePath);
 
         // TODO read tab/space preference?
         return JSON.stringify(json, null, "  ");
     }
 
     function _makeSourceMapRelativeToOutput(prefs) {
-        var sourceMapPath = prefs.outputSourceMapFile.fullPath,
-            cssFilePath = prefs.outputCSSFile.fullPath;
+        if (typeof prefs.options.sourceMap === "string") {
+            var sourceMapPath = prefs.outputSourceMapFile.fullPath,
+                cssFilePath = prefs.outputCSSFile.fullPath;
 
-        // sourceMap should be relative to the output file
-        // This is only used when generating sourceMappingURL
-        return PathUtils.makePathRelative(sourceMapPath, cssFilePath);
+            // sourceMap should be relative to the output file
+            // This is only used when generating sourceMappingURL
+            return PathUtils.makePathRelative(sourceMapPath, cssFilePath);
+        }
+        
+        return prefs.options.sourceMap;
     }
     
     function _render(path, prefs) {
@@ -90,17 +105,18 @@ define(function (require, exports, module) {
             sourceMap = _makeSourceMapRelativeToOutput(prefs);
         
         var renderPromise = _nodeDomain.exec("render",
-                 path,
-                 options.includePaths,
-                 options.imagePath,
-                 options.outputStyle,
-                 options.sourceComments,
-                 sourceMap,
-                 prefs.compiler,
-                 prefs.compass);
-        
+            path,
+            prefs.outputCSSFile.fullPath,
+            options.includePaths,
+            options.imagePath,
+            options.outputStyle,
+            options.sourceComments,
+            sourceMap,
+            prefs.compiler,
+            prefs.compass);
+
         renderPromise.then(function (response) {
-            deferred.resolve(response.css, _fixSourceMap(response.map, prefs));
+            deferred.resolve(response.css, _fixSourceMap(response.map, prefs), response.error, response._compassOutFile);
         }, deferred.reject);
         
         return deferred.promise();
@@ -115,6 +131,7 @@ define(function (require, exports, module) {
             outputName = (options && options.output) || file.name.replace(RE_FILE_EXT, ".css"),
             outputDir = (options && options.outputDir),
             parentPath = file.parentPath,
+            sourceMapPath,
             outputFile;
 
         if (outputDir) {
@@ -134,20 +151,25 @@ define(function (require, exports, module) {
         options = _.defaults(options || {}, {
             outputStyle: "nested",
             sourceComments: true,
-            sourceMap: outputFile.name + ".map"
+            sourceMap: true
         });
 
         // Initialize sourceMap with full path
-        options.sourceMap = outputFile.parentPath + options.sourceMap;
+        if (typeof options.sourceMap === "string") {
+            options.sourceMap = outputFile.parentPath + options.sourceMap;
+            sourceMapPath = options.sourceMap;
+        } else {
+            sourceMapPath = outputFile.parentPath + outputFile.name + ".map";
+        }
         
         return {
             enabled: enabled,
             compiler: compiler,
-            compass: compass,
+            compass: compass ? { projectRoot: ProjectManager.getProjectRoot().fullPath } : false,
             options: options,
             inputFile: file,
             outputCSSFile: outputFile,
-            outputSourceMapFile: FileSystem.getFileForPath(options.sourceMap)
+            outputSourceMapFile: FileSystem.getFileForPath(sourceMapPath)
         };
     }
     
@@ -215,9 +237,13 @@ define(function (require, exports, module) {
         }
 
         _.each(errors, function (err) {
+            if (err && err.path) {
+                err.path = FileUtils.convertWindowsPathToUnixPath(err.path);
+            }
+            
             if (typeof err === "string") {
                 err = {
-                    message: "Runtime error: " + err,
+                    message: err,
                     pos: {
                         line: -1
                     }
@@ -228,12 +254,8 @@ define(function (require, exports, module) {
                 var clonedError = _.clone(err);
                 clonedError.pos = _.clone(err.pos);
 
-                // FIXME determine when to add underscore prefix to partials
-                // HACK libsass errors on partials don't include the file extension!
-                clonedError.path += sassFileExtension;
-
-                partialErrorMap[clonedError.path] = partialErrorMap[clonedError.path] || [];
-                partialErrorMap[clonedError.path].push(clonedError);
+                partialErrorMap[err.path] = partialErrorMap[err.path] || [];
+                partialErrorMap[err.path].push(clonedError);
 
                 // Omit position if the file path doesn't match
                 err.pos.line = undefined;
@@ -249,9 +271,14 @@ define(function (require, exports, module) {
         scanDeferred.resolve(result);
 
         // Resolve promises for partials
-        _.each(partialErrorMap, function (partialErrors, partialPath) {
-            _deferredForScannedPath(partialPath).resolve({
-                errors: partialErrors,
+        _.each(scannedFileMap, function (deferred, partialPath) {
+            // Only deal with pending files
+            if (deferred.state() !== "pending") {
+                return;
+            }
+            
+            deferred.resolve({
+                errors: partialErrorMap[partialPath] || [],
                 aborted: false
             });
         });
@@ -274,7 +301,16 @@ define(function (require, exports, module) {
         
         renderPromise = _render(sassFile.fullPath, prefs);
         
-        return renderPromise.then(function (css, map) {
+        StatusBarUtil.showBusyStatus("Compiling " + PathUtils.makePathRelative(sassFile.fullPath, ProjectManager.getProjectRoot().fullPath));
+        
+        return renderPromise.then(function (css, map, error, _compassOutFile) {
+            // HACK deal with compass output
+            if (_compassOutFile) {
+                _compassOutFile = FileUtils.convertWindowsPathToUnixPath(_compassOutFile);
+                cssFile = FileSystem.getFileForPath(_compassOutFile);
+                mapFile = FileSystem.getFileForPath(_compassOutFile + ".map");
+            }
+
             var eventData = {
                     css: {
                         file: cssFile,
@@ -288,7 +324,6 @@ define(function (require, exports, module) {
             
             if (map) {
                 _mkdirp(mapFile.parentPath).done(function () {
-                    // TODO relative paths in sourceMap?
                     FileUtils.writeText(mapFile, map, true);
                 
                     eventData.sourceMap = {
@@ -298,26 +333,39 @@ define(function (require, exports, module) {
                 });
             }
             
-            _finishScan(sassFile);
+            _finishScan(sassFile, error);
         }, function (errors) {
             _finishScan(sassFile, errors);
+        }).always(function () {
+            StatusBarUtil.hideBusyStatus();
         });
     }
     
     function preview(sassFile, docs) {
         var deferred = new $.Deferred(),
-            prefs = _getPreferencesForFile(sassFile),
-            cssFile = prefs.outputCSSFile,
+            prefs = _getPreferencesForFile(sassFile);
+        
+        // TODO warnings for compass that live preview isn't supported yet
+        // TODO support compiler errors with compass
+        // Requires changes to config.rb?
+        if (prefs.compass) {
+            _finishScan(sassFile, []);
+            return deferred.resolve().promise();
+        }
+        
+        var cssFile = prefs.outputCSSFile,
             mapFile = prefs.outputSourceMapFile,
             sourceMap = _makeSourceMapRelativeToOutput(prefs),
             options = prefs.options,
             previewPromise,
-            inMemoryFiles = _getInMemoryFiles(docs);
+            inMemoryFiles = _getInMemoryFiles(docs),
+            compass = prefs.compass;
         
         $(exports).triggerHandler("sourceMapPreviewStart", [sassFile, cssFile]);
         
         previewPromise = _nodeDomain.exec("preview",
             sassFile.fullPath,
+            prefs.outputCSSFile.fullPath,
             inMemoryFiles,
             options.includePaths,
             options.imagePath,
@@ -326,6 +374,8 @@ define(function (require, exports, module) {
             sourceMap,
             prefs.compiler,
             prefs.compass);
+        
+        StatusBarUtil.showBusyStatus("Checking for errors");
         
         previewPromise.then(function (response) {
             var eventData = {
@@ -340,7 +390,7 @@ define(function (require, exports, module) {
             };
             
             $(exports).triggerHandler("sourceMapPreviewEnd", [sassFile, eventData]);
-            _finishScan(sassFile);
+            _finishScan(sassFile, response.error);
             
             deferred.resolve(response.css, response.map);
         }, function (errors) {
@@ -348,6 +398,8 @@ define(function (require, exports, module) {
             _finishScan(sassFile, errors);
             
             deferred.reject(errors);
+        }).always(function () {
+            StatusBarUtil.hideBusyStatus();
         });
         
         return deferred.promise();
@@ -360,6 +412,7 @@ define(function (require, exports, module) {
     function _prefChangeHandler(event) {
         // TODO compile all files?
         // _compileWithPreferences();
+        _nodeDomain.exec("setCompilerTimeout", extensionPrefs.get(PREF_TIMEOUT));
     }
         
     // Register preferences
@@ -374,6 +427,11 @@ define(function (require, exports, module) {
 
     extensionPrefs.definePreference(PREF_COMPASS, "boolean", false)
         .on("change", _prefChangeHandler);
+
+    extensionPrefs.definePreference(PREF_TIMEOUT, "number", -1)
+        .on("change", _prefChangeHandler);
+    
+    _prefChangeHandler();
 
     // Public API
     exports.compile = compile;

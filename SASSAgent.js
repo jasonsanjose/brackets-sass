@@ -40,10 +40,6 @@ define(function (require, exports, module) {
     var server,
         mapSourceURLs = {};
     
-    var previewDebounce = _.debounce(function (root, inMemoryFiles) {
-        Compiler.preview(root, inMemoryFiles);
-    }, 500);
-
     function _setStatus(status, err) {
         // HACK expose LiveDevelopment._setStatus()
         LiveDevelopment.status = status;

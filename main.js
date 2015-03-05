@@ -177,25 +177,50 @@ define(function (require, exports, module) {
      * @param {!path} path
      */
     function _scanFileAsync(text, path) {
-        var promise = Compiler.getErrors(path);
+        // FIXME How to avoid calling preview() followed by compile()?
+        // CodeInspection runs first firing _scanFileAsync. For now,
+        // we just won't show errors when switching to a file that is not dirty
+        var fileToScan = FileSystem.getFileForPath(path),
+            usages = SourceMapManager.getUsageForFile(fileToScan),
+            docs,
+            inputFile = fileToScan,
+            deferred = new $.Deferred(),
+            usagePromise;
         
-        // If the promise is resolved, errors were cached when the file was
-        // compiled as a partial.
-        if (promise.state() === "pending") {
-            // FIXME How to avoid calling preview() followed by compile()?
-            // CodeInspection runs first firing _scanFileAsync. For now,
-            // we just won't show errors when switching to a file that is not dirty
-            var sassFile = FileSystem.getFileForPath(path);
-
-            // FIXME compile input SASS file (i.e. not partials) with in-memory document content
-            // var inMemoryDocsPromise = SourceMapManager.getSourceDocuments(sassFile);
-            // inMemoryDocsPromise.then(function (docs) {
-            var docs = [DocumentManager.getOpenDocumentForPath(path)];
-            Compiler.preview(sassFile, docs);
-            //});
+        if (_.size(usages) > 0) {
+            _.find(usages, function (usage) {
+                // Compile input SASS file (i.e. not partials) with in-memory document content
+                usagePromise = SourceMapManager.getSourceDocuments(usage.cssFile);
+                usagePromise.then(function (sourceDocs) {
+                    docs = sourceDocs;
+                    inputFile = usage.sourceMap.sassFile;
+                });
+                
+                // Compile first usage only
+                // FIXME support multiple usage?
+                return true;
+            });
+        } else {
+            docs = [];
+            usagePromise = new $.Deferred().resolve().promise();
         }
         
-        return promise;
+        usagePromise.always(function () {
+            var errorPromise = Compiler.getErrors(path);
+            
+            // If the promise is resolved, errors were cached when the file was
+            // compiled as a partial.
+            if (errorPromise.state() === "pending") {
+                docs.unshift(DocumentManager.getOpenDocumentForPath(path));
+                Compiler.preview(inputFile, docs);
+            }
+            
+            errorPromise.done(function (result) {
+                deferred.resolve(result);
+            });
+        });
+        
+        return deferred.promise();
     }
 
     function _scanForSourceMaps() {
