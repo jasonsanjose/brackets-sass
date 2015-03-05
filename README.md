@@ -39,7 +39,7 @@ Choose which compiler to use. `libsass` is used by default and is bundled with t
 Type: `Boolean`
 Default: `false`
 
-__EXPERIMENTAL__ Enable/Disable [Compass](http://compass-style.org/) for a file. Some Compass features will require a `config.rb` file at your project root.
+__EXPERIMENTAL__ Enable/Disable [Compass](http://compass-style.org/) for a file. Requires `"sass.compiler": "ruby"` and [Compass installation](http://compass-style.org/install/). Some Compass features will require a `config.rb` file at your project root.
 
 As of the 2.0.x release, Compass support is experimental. Compiler workflows in Brackets are supported, e.g.:
 
@@ -48,7 +48,7 @@ As of the 2.0.x release, Compass support is experimental. Compiler workflows in 
 * Compiling when a partial changes
 * Source map output
 
-Note that __Live Preview is NOT supported yet__.
+Note that __Live Preview is NOT supported yet__. See [example project](https://github.com/jasonsanjose/compass-example) for usage.
 
 ### sass.options
 
