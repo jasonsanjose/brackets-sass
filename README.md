@@ -1,79 +1,107 @@
 brackets-sass
 ===========================
 
-Compiles *.scss/*.sass files when changed. Updates styles during Live Preview. Demo video: http://youtu.be/gYE7jybP_5Y.
+Compiles \*.scss/\*.sass files when changed. Updates styles during Live Preview. Demo video: http://youtu.be/gYE7jybP_5Y.
 
-## Compatibility
+## Compiler Compatibility
 
-This extension uses [libsass](http://github.com/sass/libsass) instead of the Ruby-based `sass` compiler. For details on compatibility with the latest Sass features and popular Sass frameworks, [see the wiki](http://github.com/jasonsanjose/brackets-sass/wiki#compatibility).
+By default, this extension uses [libsass](http://github.com/sass/libsass) [3.1](https://github.com/sass/libsass/releases/tag/3.1.0). The Ruby-based `sass` compiler is also supported, see `sass.compiler` [preference](#sasscompiler). For details on compatibility with the latest Sass features and popular Sass frameworks, [see the wiki](http://github.com/jasonsanjose/brackets-sass/wiki/Compatibility).
 
 ## Features
 
-* Compiles `*.sass` and `*.scss` files when changed and when any partial (`@import` dependency) is changed
+* Compiles `*.sass` (indented syntax) and `*.scss` (main syntax) files when changed and when any partial (`@import` dependency) is changed
 * Generates source maps
 * Show SASS compiler errors
 * Update CSS in Brackets' Live Preview 
+* Option to swap libsass for Ruby sass compiler implementation
+* __Experimental__ Compass support
 
 ## Future Plans
 
-* Compile keyboard shortcut (instead of waiting for file changes)
 * Selector highlighting
-* Option to swap `libsass` for Ruby `sass` compiler implementation
-* Compass support
 
 ## Preferences
 
-These options are passed through to [node-sass](https://github.com/andrew/node-sass).
-
-Reference: [Sample project using Bourbon](https://github.com/jasonsanjose/bourbon-example) and `.brackets.json` preferences file.
-
 ### sass.enabled
-Enable/Disable SASS compilation for a file. Default: `true`
-
-### sass.options
-Derived from [node-sass](https://github.com/andrew/node-sass) README.
-
-### outputDir
-`outputDir` is a `String` relative file path (relative to the input file) to output both the CSS file and the source map.
-Default: `<input file parent directory>`.
-
-### output
-`output` is a `String` relative file path (relative to the input file, or relative to `outputDir`) for the output CSS file.
-Default: `<filename>.css`.
-
-#### includePaths
-`includePaths` is an `Array` of path `String`s to look for any `@import`ed files. It is recommended that you use this option if you are using the `data` option and have **any** `@import` directives, as otherwise [libsass] may not find your depended-on files.
-Default: `[<empty>]`
-
-#### imagePath
-`imagePath` is a `String` that represents the public image path. When using the `image-url()` function in a stylesheet, this path will be prepended to the path you supply. eg. Given an `imagePath` of `/path/to/images`, `background-image: image-url('image.png')` will compile to `background-image: url("/path/to/images/image.png")`
-Default: `null`
-
-#### outputStyle
-`outputStyle` is a `String` to determine how the final CSS should be rendered. Its value should be one of `'nested'` or `'compressed'`.
-[`'expanded'` and `'compact'` are not currently supported by [libsass]]
-Default: `nested`
-
-#### sourceComments
-`sourceComments` is a `Boolean` flag to determine what debug information is included in the output file.
+Type: `Boolean`
 Default: `true`
 
-#### sourceMap
-If your `sourceComments` option is set to true, `sourceMap` allows setting a new path context for the referenced Sass files.
-The source map describes a path relative to your `output` CSS file location. In most occasions this will work out-of-the-box but, in some cases, you may need to set a different output.
-Default: `<filename>.css.map`.
+Enable/Disable compilation for a file.
 
-### Sample .brackets.json File
+### sass.compiler
+Type: `String`
+Default: `libsass`
+Values: `libsass`, `ruby`
+
+Choose which compiler to use. `libsass` is used by default and is bundled with the extension, no extra install is necessary. Use `ruby` if you need full compatilibity with 3.4 (learn more about [libsass compatibility](https://github.com/sass/libsass/wiki/The-LibSass-Compatibility-Plan). Using the `ruby` options requires [separate installation](http://sass-lang.com/install).
+
+### sass.compass
+Type: `Boolean`
+Default: `false`
+
+__EXPERIMENTAL__ Enable/Disable [Compass](http://compass-style.org/) for a file. Some Compass features will require a `config.rb` file at your project root.
+
+As of the 2.0.x release, Compass support is experimental. Compiler workflows in Brackets are supported, e.g.:
+
+* Compiling on save
+* Compiler errors
+* Compiling when a partial changes
+* Source map output
+
+Note that __Live Preview is NOT supported yet__.
+
+### sass.options
+
+#### outputDir
+Type: `String`
+Default: `<parent directory of input sass file>`
+
+A relative file path (relative to the input file) to output both the CSS file and the source map.
+
+#### output
+Type: `String`
+Default: `<input sass file name>.css`
+
+File name to use for the output CSS file.
+
+#### includePaths
+Type: `Array<String>`
+Default: `[]`
+
+An array of paths to use when resolving `@import` declarations (a.k.a `--load-path`, see [Sass documentation](http://sass-lang.com/documentation/file.SASS_REFERENCE.html#load_paths-option))
+
+#### outputStyle
+Type: `String`
+Default: `nested`
+Values: `nested`, `compressed`
+
+Determines the output format of the final CSS style. (`'expanded'` and `'compact'` are not currently supported by [libsass], but are planned in a future version.)
+
+#### sourceComments
+Type: `Boolean`
+Default: `false`
+
+`true` enables additional debugging information in the output file as CSS comments
+
+#### sourceMap
+Type: `Boolean | String | undefined`
+Default: `true` (implies `<input sass file name>`.css.map)
+
+Outputs a source map. When `sourceMap === true`, the values for `outputDir` and `output` are used as the target output location for the source map. When `typeof sourceMap === "String"`, the value of `sourceMap` will be used as the writing location for the file.
+
+## Sample .brackets.json File
+
+Reference: [Sample project using Bourbon](https://github.com/jasonsanjose/bourbon-example) and `.brackets.json` preferences file.
 
 ```
 /*
 Resulting file tree will appear as follows:
-+ bower_components
-|--- bourbon/dist/_bourbon.scss
-+ css
++ bower_components/
+|--- bourbon/app/assets/stylesheets/_bourbon.scss
++ css/
 |--- app.css
 |--- app.css.map
-+ scss
++ scss/
 |--- app.scss
 */
 
@@ -82,13 +110,11 @@ Resulting file tree will appear as follows:
     /* disable compiling other files that aren't the "main" file */
     "sass.enabled": false,
     "path": {
-        /* default options */
         "scss/app.scss": {
             "sass.enabled": true,
             "sass.options": {
                 "outputDir": "../css/",
                 "includePaths": [],
-                "imagePath": null,
                 "sourceComments": true,
                 "outputStyle": "nested"
             }
