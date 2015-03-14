@@ -25,20 +25,21 @@
 define(function (require, exports, module) {
     "use strict";
     
-    var Compiler            = require("Compiler"),
-        NestedStyleParser   = require("NestedStyleParser"),
-        SASSAgent           = require("SASSAgent"),
-        SourceMapManager    = require("SourceMapManager");
+    var Compiler          = require("Compiler"),
+        NestedStyleParser = require("NestedStyleParser"),
+        SASSAgent         = require("SASSAgent"),
+        SourceMapManager  = require("SourceMapManager");
     
-    var _                   = brackets.getModule("thirdparty/lodash"),
-        AppInit             = brackets.getModule("utils/AppInit"),
-        Async               = brackets.getModule("utils/Async"),
-        CSSUtils            = brackets.getModule("language/CSSUtils"),
-        CodeInspection      = brackets.getModule("language/CodeInspection"),
-        DocumentManager     = brackets.getModule("document/DocumentManager"),
-        FileUtils           = brackets.getModule("file/FileUtils"),
-        FileSystem          = brackets.getModule("filesystem/FileSystem"),
-        ProjectManager      = brackets.getModule("project/ProjectManager");
+    var _                 = brackets.getModule("thirdparty/lodash"),
+        AppInit           = brackets.getModule("utils/AppInit"),
+        Async             = brackets.getModule("utils/Async"),
+        CSSUtils          = brackets.getModule("language/CSSUtils"),
+        CodeInspection    = brackets.getModule("language/CodeInspection"),
+        DocumentManager   = brackets.getModule("document/DocumentManager"),
+        ExtensionManager  = brackets.getModule("extensibility/ExtensionManager"),
+        FileUtils         = brackets.getModule("file/FileUtils"),
+        FileSystem        = brackets.getModule("filesystem/FileSystem"),
+        ProjectManager    = brackets.getModule("project/ProjectManager");
 
     // Distinguish input SASS files from partials
     var RE_INPUT_FILE = /^[^_].*\.(scss|sass)$/,
@@ -396,6 +397,12 @@ define(function (require, exports, module) {
         });
     });
     
+    ExtensionManager.on("statusChange", function (event, extensionId) {
+        if (extensionId === "jasonsanjose.brackets-sass" && (ExtensionManager.isMarkedForUpdate(extensionId) || ExtensionManager.isMarkedForRemoval(extensionId))) {
+            Compiler.killProcess();
+        }
+    });
+
     // Delay initialization until `appReady` event is fired
     AppInit.appReady(_appReady);
 });

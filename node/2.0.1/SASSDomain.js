@@ -470,6 +470,13 @@ function setCompilerTimeout(timeout) {
     _timeout = timeout;
 }
 
+function killProcess() {
+    if (_compilerProcess) {
+        _compilerProcess.kill();
+        _compilerProcess = undefined;
+    }
+}
+
 /**
  * Initialize the "childProcess" domain.
  * The fileWatcher domain handles watching and un-watching directories.
@@ -560,6 +567,15 @@ function init(domainManager) {
         ]
     );
     
+    domainManager.registerCommand(
+        DOMAIN,
+        "killProcess",
+        killProcess,
+        false,
+        "Kill the compiler process",
+        []
+    );
+
     _domainManager = domainManager;
 }
 
