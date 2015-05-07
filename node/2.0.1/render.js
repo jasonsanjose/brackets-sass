@@ -157,10 +157,10 @@ ruby.render = function (message) {
     };
     
     // log details to brackets
-    process.send({
+    /*process.send({
         message: message,
         command: command
-    });
+    });*/
 
     rubyChildProcess = cp.exec(command, options, function (execError, stdout, stderr) {
         if (stderr) {
@@ -171,10 +171,11 @@ ruby.render = function (message) {
         
         _readTempFile(message.outFile, function (content) {
             css = content;
-        
-            _readTempFile(tmpCssMapFile, function (content) {
-                map = content;
-            });
+        });
+        _readTempFile(tmpCssMapFile, function (content) {
+            map = content;
+
+            fs.unlink(tmpCssMapFile);
         });
     });
 };
