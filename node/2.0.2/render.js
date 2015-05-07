@@ -30,7 +30,7 @@ process.on("uncaughtException", function (error) {
 
 // HACK make process.sassBinaryName read only
 Object.defineProperty(process, "sassBinaryName", {
-    value: process.platform + "-ia32-node-0.10"
+    value: process.platform + "-ia32-11"
 });
 
 var cp = require("child_process"),
@@ -157,10 +157,12 @@ ruby.render = function (message) {
         
         _readTempFile(message.outFile, function (content) {
             css = content;
+        });
         
-            _readTempFile(tmpCssMapFile, function (content) {
-                map = content;
-            });
+        _readTempFile(tmpCssMapFile, function (content) {
+            map = content;
+        
+            fs.unlink(tmpCssMapFile);
         });
     });
 };
