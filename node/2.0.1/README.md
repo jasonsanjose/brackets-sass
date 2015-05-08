@@ -17,7 +17,7 @@ git mv node/X.X.X node/Y.Y.Y
 
 ## Update client-side code to match the new version
 
-See `/Compiler.js`.
+See [Compiler.js](../../Compiler.js).
 
 ```
 var _domainPath = ExtensionUtils.getModulePath(module, "node/Y.Y.Y/SASSDomain"),
@@ -26,7 +26,7 @@ var _domainPath = ExtensionUtils.getModulePath(module, "node/Y.Y.Y/SASSDomain"),
 
 ## Update node-side code to match the new version
 
-See `/node/Y.Y.Y/SASSDomain.js`.
+See [SASSDomain](./SASSDomain.js).
 
 ```
 var DOMAIN = "sass-vY.Y.Y",
