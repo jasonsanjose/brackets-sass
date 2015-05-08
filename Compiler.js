@@ -414,6 +414,10 @@ define(function (require, exports, module) {
         // _compileWithPreferences();
         _nodeDomain.exec("setCompilerTimeout", extensionPrefs.get(PREF_TIMEOUT));
     }
+
+    function killProcess() {
+        _nodeDomain.exec("killProcess");
+    }
         
     // Register preferences
     extensionPrefs.definePreference(PREF_ENABLED, "boolean", true)
@@ -438,4 +442,5 @@ define(function (require, exports, module) {
     exports.preview = preview;
     exports.deleteTempFiles = deleteTempFiles;
     exports.getErrors = getErrors;
+    exports.killProcess = killProcess;
 });
