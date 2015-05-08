@@ -1,7 +1,35 @@
-Mac only instructions when building/updating node-sass module:
+# Making changes to node.js modules and dependencies
+
+Due to how [Brackets loads node domains](https://github.com/adobe/brackets/issues/9744), we must manually version the node modules (see `/node/*` files in the repository root) whenever any files change in this sub-tree.
+
+## Rename the node directory to match the extension's version
+
+```
+# Match Y.Y.Y to /package.json version for this extension
+git mv node/X.X.X node/Y.Y.Y
+```
+
+## Update client-side code to match the new version
+
+See `/Compiler.js`.
+
+```
+var _domainPath = ExtensionUtils.getModulePath(module, "node/Y.Y.Y/SASSDomain"),
+    _nodeDomain = new NodeDomain("sass-vY.Y.Y", _domainPath);
+```
+
+## Update node-side code to match the new version
+
+See `/node/Y.Y.Y/SASSDomain.js`.
+
+```
+var DOMAIN = "sass-vY.Y.Y",
+```
+
+# Mac only instructions when updating node-sass module
 
 Brackets' built-in copy of node expects a 32-bit `binding.node`. This is
-neither pre-built https://github.com/andrew/node-sass-binaries nor built
+neither pre-built https://github.com/sass/node-sass-binaries nor built
 during `npm install`. To build the 32-bit binary on Mac:
 
 ```
