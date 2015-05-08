@@ -1,6 +1,6 @@
 # Upgrading node-sass
 
-* Update `/node/X.X.X/package.json` to update the `node-sass` dependency
+* Update [/node/X.X.X/package.json](./package.json) to update the `node-sass` dependency
 * Run `npm install`
 * Follow instructions below to update the version
 
