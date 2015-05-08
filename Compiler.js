@@ -444,7 +444,7 @@ define(function (require, exports, module) {
         // _compileWithPreferences();
         _nodeDomain.exec("setCompilerTimeout", extensionPrefs.get(PREF_TIMEOUT));
     }
-
+        
     // Register preferences
     extensionPrefs.definePreference(PREF_ENABLED, "boolean", true)
         .on("change", _prefChangeHandler);
