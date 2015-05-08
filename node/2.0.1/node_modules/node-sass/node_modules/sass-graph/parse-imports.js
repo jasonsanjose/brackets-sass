@@ -1,5 +1,5 @@
 function parseImports(content) {
-  var importRe = /\@import ([.\s\S]+?);/g;
+  var importRe = /\@import ([.\s\S]+?);?$/g;
   var depRe = /["'](.+?)["']/g;
   var importMatch = {};
   var depMatch = {};

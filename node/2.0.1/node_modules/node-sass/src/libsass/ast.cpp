@@ -8,6 +8,8 @@
 namespace Sass {
   using namespace std;
 
+  static Null sass_null(Sass::Null(ParserState("null")));
+
   bool Compound_Selector::operator<(const Compound_Selector& rhs) const
   {
     To_String to_string;
@@ -22,13 +24,13 @@ namespace Sass {
     return const_cast<Complex_Selector*>(this)->perform(&to_string) <
            const_cast<Complex_Selector&>(rhs).perform(&to_string);
   }
-  
+
   bool Complex_Selector::operator==(const Complex_Selector& rhs) const {
   	// TODO: We have to access the tail directly using tail_ since ADD_PROPERTY doesn't provide a const version.
 
   	const Complex_Selector* pOne = this;
     const Complex_Selector* pTwo = &rhs;
-    
+
     // Consume any empty references at the beginning of the Complex_Selector
     if (pOne->combinator() == Complex_Selector::ANCESTOR_OF && pOne->head()->is_empty_reference()) {
     	pOne = pOne->tail_;
@@ -36,12 +38,12 @@ namespace Sass {
     if (pTwo->combinator() == Complex_Selector::ANCESTOR_OF && pTwo->head()->is_empty_reference()) {
     	pTwo = pTwo->tail_;
     }
-    
+
     while (pOne && pTwo) {
     	if (pOne->combinator() != pTwo->combinator()) {
       	return false;
       }
-      
+
       if (*(pOne->head()) != *(pTwo->head())) {
       	return false;
       }
@@ -49,7 +51,7 @@ namespace Sass {
     	pOne = pOne->tail_;
       pTwo = pTwo->tail_;
     }
-    
+
     return pOne == NULL && pTwo == NULL;
   }
 
@@ -63,7 +65,7 @@ namespace Sass {
     }
     return unified;
   }
-  
+
   bool Simple_Selector::operator==(const Simple_Selector& rhs) const
   {
   	// Compare the string representations for equality.
@@ -75,21 +77,21 @@ namespace Sass {
     To_String to_string;
     return pLHS->perform(&to_string) == pRHS->perform(&to_string);
   }
-  
+
   bool Simple_Selector::operator<(const Simple_Selector& rhs) const {
 		// Use the string representation for ordering.
 
   	// Cast away const here. To_String should take a const object, but it doesn't.
   	Simple_Selector* pLHS = const_cast<Simple_Selector*>(this);
     Simple_Selector* pRHS = const_cast<Simple_Selector*>(&rhs);
-    
+
     To_String to_string;
     return pLHS->perform(&to_string) < pRHS->perform(&to_string);
   }
 
   Compound_Selector* Simple_Selector::unify_with(Compound_Selector* rhs, Context& ctx)
   {
-    To_String to_string;
+    To_String to_string(&ctx);
     for (size_t i = 0, L = rhs->length(); i < L; ++i)
     { if (perform(&to_string) == (*rhs)[i]->perform(&to_string)) return rhs; }
 
@@ -102,7 +104,7 @@ namespace Sass {
       {
         if ((typeid(*(*rhs)[i]) == typeid(Pseudo_Selector) || typeid(*(*rhs)[i]) == typeid(Wrapped_Selector)) && (*rhs)[L-1]->is_pseudo_element())
         { found = true; break; }
-      }  
+      }
     }
     else
     {
@@ -118,7 +120,7 @@ namespace Sass {
       (*cpy) << this;
       return cpy;
     }
-    Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->path(), rhs->position());
+    Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->pstate());
     for (size_t j = 0; j < i; ++j)
     { (*cpy) << (*rhs)[j]; }
     (*cpy) << this;
@@ -133,7 +135,7 @@ namespace Sass {
 
     // if the rhs is empty, just return a copy of this
     if (rhs->length() == 0) {
-      Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->path(), rhs->position());
+      Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->pstate());
       (*cpy) << this;
       return cpy;
     }
@@ -141,7 +143,7 @@ namespace Sass {
     // if this is a universal selector and rhs is not empty, just return the rhs
     if (name() == "*")
     { return new (ctx.mem) Compound_Selector(*rhs); }
-    
+
 
     Simple_Selector* rhs_0 = (*rhs)[0];
     // otherwise, this is a tag name
@@ -150,7 +152,7 @@ namespace Sass {
       // if rhs is universal, just return this tagname + rhs's qualifiers
       if (static_cast<Type_Selector*>(rhs_0)->name() == "*")
       {
-        Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->path(), rhs->position());
+        Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->pstate());
         (*cpy) << this;
         for (size_t i = 1, L = rhs->length(); i < L; ++i)
         { (*cpy) << (*rhs)[i]; }
@@ -164,7 +166,7 @@ namespace Sass {
       { return 0; }
     }
     // else it's a tag name and a bunch of qualifiers -- just append them
-    Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->path(), rhs->position());
+    Compound_Selector* cpy = new (ctx.mem) Compound_Selector(rhs->pstate());
     (*cpy) << this;
     (*cpy) += rhs;
     return cpy;
@@ -183,6 +185,7 @@ namespace Sass {
           return 0;
       }
     }
+    rhs->has_line_break(has_line_break());
     return Simple_Selector::unify_with(rhs, ctx);
   }
 
@@ -208,9 +211,9 @@ namespace Sass {
 
     Simple_Selector* lbase = base();
     Simple_Selector* rbase = rhs->base();
-    
+
     // Check if pseudo-elements are the same between the selectors
-    
+
     set<string> lpsuedoset, rpsuedoset;
     for (size_t i = 0, L = length(); i < L; ++i)
     {
@@ -262,12 +265,12 @@ namespace Sass {
     // catch-all
     return false;
   }
-  
+
   bool Compound_Selector::operator==(const Compound_Selector& rhs) const {
     To_String to_string;
-    
+
     // Check if pseudo-elements are the same between the selectors
-    
+
     set<string> lpsuedoset, rpsuedoset;
     for (size_t i = 0, L = length(); i < L; ++i)
     {
@@ -290,33 +293,33 @@ namespace Sass {
     }
 
 		// Check the base
-    
+
     const Simple_Selector* const lbase = base();
     const Simple_Selector* const rbase = rhs.base();
-    
+
     if ((lbase && !rbase) ||
     	(!lbase && rbase) ||
       ((lbase && rbase) && (*lbase != *rbase))) {
 			return false;
     }
-    
-    
+
+
     // Check the rest of the SimpleSelectors
     // Use string representations. We can't create a set of Simple_Selector pointers because std::set == std::set is going to call ==
     // on the pointers to determine equality. I don't know of a way to pass in a comparison object. The one you can specify as part of
     // the template type is used for ordering, but not equality. We also can't just put in non-pointer Simple_Selectors because the
     // class is intended to be subclassed, and we'd get splicing.
-    
+
     set<string> lset, rset;
-    
+
     for (size_t i = 0, L = length(); i < L; ++i)
     { lset.insert((*this)[i]->perform(&to_string)); }
     for (size_t i = 0, L = rhs.length(); i < L; ++i)
     { rset.insert(rhs[i]->perform(&to_string)); }
-    
+
     return lset == rset;
   }
-  
+
   bool Complex_Selector_Pointer_Compare::operator() (const Complex_Selector* const pLeft, const Complex_Selector* const pRight) const {
     return *pLeft < *pRight;
   }
@@ -361,7 +364,7 @@ namespace Sass {
     if (!found)
     { return false; }
 
-    /* 
+    /*
       Hmm, I hope I have the logic right:
 
       if lhs has a combinator:
@@ -413,7 +416,10 @@ namespace Sass {
   {
     if (!tail()) return 0;
     if (!head()) return tail()->context(ctx);
-    return new (ctx.mem) Complex_Selector(path(), position(), combinator(), head(), tail()->context(ctx));
+    Complex_Selector* cpy = new (ctx.mem) Complex_Selector(pstate(), combinator(), head(), tail()->context(ctx));
+    cpy->media_block(media_block());
+    cpy->last_block(last_block());
+    return cpy;
   }
 
   Complex_Selector* Complex_Selector::innermost()
@@ -446,12 +452,12 @@ namespace Sass {
     if (tail()) cpy->tail(tail()->clone(ctx));
     return cpy;
   }
-  
+
   Complex_Selector* Complex_Selector::cloneFully(Context& ctx) const
   {
     Complex_Selector* cpy = new (ctx.mem) Complex_Selector(*this);
 
-		if (head()) {
+    if (head()) {
     	cpy->head(head()->clone(ctx));
     }
 
@@ -461,20 +467,21 @@ namespace Sass {
 
     return cpy;
   }
-  
+
   Compound_Selector* Compound_Selector::clone(Context& ctx) const
   {
     Compound_Selector* cpy = new (ctx.mem) Compound_Selector(*this);
     return cpy;
   }
-  
 
 
+
+  /* not used anymore - remove?
   Selector_Placeholder* Selector::find_placeholder()
   {
     return 0;
-  }
-  
+  }*/
+
   void Selector_List::adjust_after_pushing(Complex_Selector* c)
   {
     if (c->has_reference())   has_reference(true);
@@ -486,6 +493,7 @@ namespace Sass {
 #endif
   }
 
+  /* not used anymore - remove?
   Selector_Placeholder* Selector_List::find_placeholder()
   {
     if (has_placeholder()) {
@@ -494,8 +502,9 @@ namespace Sass {
       }
     }
     return 0;
-  }
+  }*/
 
+  /* not used anymore - remove?
   Selector_Placeholder* Complex_Selector::find_placeholder()
   {
     if (has_placeholder()) {
@@ -503,8 +512,9 @@ namespace Sass {
       else if (tail() && tail()->has_placeholder()) return tail()->find_placeholder();
     }
     return 0;
-  }
+  }*/
 
+  /* not used anymore - remove?
   Selector_Placeholder* Compound_Selector::find_placeholder()
   {
     if (has_placeholder()) {
@@ -514,12 +524,13 @@ namespace Sass {
       // return this;
     }
     return 0;
-  }
+  }*/
 
+  /* not used anymore - remove?
   Selector_Placeholder* Selector_Placeholder::find_placeholder()
   {
     return this;
-  }
+  }*/
 
   vector<string> Compound_Selector::to_str_vec()
   {
@@ -533,8 +544,8 @@ namespace Sass {
 
   Compound_Selector* Compound_Selector::minus(Compound_Selector* rhs, Context& ctx)
   {
-    To_String to_string;
-    Compound_Selector* result = new (ctx.mem) Compound_Selector(path(), position());
+    To_String to_string(&ctx);
+    Compound_Selector* result = new (ctx.mem) Compound_Selector(pstate());
 
     // not very efficient because it needs to preserve order
     for (size_t i = 0, L = length(); i < L; ++i)
@@ -554,7 +565,7 @@ namespace Sass {
 
     return result;
   }
-  
+
   void Compound_Selector::mergeSources(SourcesSet& sources, Context& ctx)
   {
     for (SourcesSet::iterator iterator = sources.begin(), endIterator = sources.end(); iterator != endIterator; ++iterator) {
@@ -562,6 +573,7 @@ namespace Sass {
     }
   }
 
+  /* not used anymore - remove?
   vector<Compound_Selector*> Complex_Selector::to_vector()
   {
     vector<Compound_Selector*> result;
@@ -575,6 +587,277 @@ namespace Sass {
       if (h) result.push_back(h);
     }
     return result;
+  }*/
+
+  Number::Number(ParserState pstate, double val, string u, bool zero)
+  : Expression(pstate),
+    value_(val),
+    zero_(zero),
+    numerator_units_(vector<string>()),
+    denominator_units_(vector<string>()),
+    hash_(0)
+  {
+    size_t l = 0, r = 0;
+    if (!u.empty()) {
+      bool nominator = true;
+      while (true) {
+        r = u.find_first_of("*/", l);
+        string unit(u.substr(l, r - l));
+        if (nominator) numerator_units_.push_back(unit);
+        else denominator_units_.push_back(unit);
+        if (u[r] == '/') nominator = false;
+        if (r == string::npos) break;
+        else l = r + 1;
+      }
+    }
+    concrete_type(NUMBER);
+  }
+
+  string Number::unit() const
+  {
+    stringstream u;
+    for (size_t i = 0, S = numerator_units_.size(); i < S; ++i) {
+      if (i) u << '*';
+      u << numerator_units_[i];
+    }
+    if (!denominator_units_.empty()) u << '/';
+    for (size_t i = 0, S = denominator_units_.size(); i < S; ++i) {
+      if (i) u << '*';
+      u << denominator_units_[i];
+    }
+    return u.str();
+  }
+
+  bool Number::is_unitless()
+  { return numerator_units_.empty() && denominator_units_.empty(); }
+
+  void Number::normalize(const string& prefered)
+  {
+
+    // first make sure same units cancel each other out
+    // it seems that a map table will fit nicely to do this
+    // we basically construct exponents for each unit
+    // has the advantage that they will be pre-sorted
+    map<string, int> exponents;
+
+    // initialize by summing up occurences in unit vectors
+    for (size_t i = 0, S = numerator_units_.size(); i < S; ++i) ++ exponents[numerator_units_[i]];
+    for (size_t i = 0, S = denominator_units_.size(); i < S; ++i) -- exponents[denominator_units_[i]];
+
+    // the final conversion factor
+    double factor = 1;
+
+    // get the first entry of numerators
+    // forward it when entry is converted
+    vector<string>::iterator nom_it = numerator_units_.begin();
+    vector<string>::iterator nom_end = numerator_units_.end();
+    vector<string>::iterator denom_it = denominator_units_.begin();
+    vector<string>::iterator denom_end = denominator_units_.end();
+
+    // main normalization loop
+    // should be close to optimal
+    while (denom_it != denom_end)
+    {
+      // get and increment afterwards
+      const string denom = *(denom_it ++);
+      // skip already canceled out unit
+      if (exponents[denom] >= 0) continue;
+      // skip all units we don't know how to convert
+      if (string_to_unit(denom) == INCOMMENSURABLE) continue;
+      // now search for nominator
+      while (nom_it != nom_end)
+      {
+        // get and increment afterwards
+        const string nom = *(nom_it ++);
+        // skip already canceled out unit
+        if (exponents[nom] <= 0) continue;
+        // skip all units we don't know how to convert
+        if (string_to_unit(nom) == INCOMMENSURABLE) continue;
+        // we now have two convertable units
+        // add factor for current conversion
+        factor *= conversion_factor(nom, denom);
+        // update nominator/denominator exponent
+        -- exponents[nom]; ++ exponents[denom];
+        // inner loop done
+        break;
+      }
+    }
+
+    // now we can build up the new unit arrays
+    numerator_units_.clear();
+    denominator_units_.clear();
+
+    // build them by iterating over the exponents
+    for (auto exp : exponents)
+    {
+      // maybe there is more effecient way to push
+      // the same item multiple times to a vector?
+      for(size_t i = 0, S = abs(exp.second); i < S; ++i)
+      {
+        // opted to have these switches in the inner loop
+        // makes it more readable and should not cost much
+        if (exp.second < 0) denominator_units_.push_back(exp.first);
+        else if (exp.second > 0) numerator_units_.push_back(exp.first);
+      }
+    }
+
+    // apply factor to value_
+    // best precision this way
+    value_ *= factor;
+
+    // maybe convert to other unit
+    // easier implemented on its own
+    convert(prefered);
+
+  }
+
+  void Number::convert(const string& prefered)
+  {
+    // abort if unit is empty
+    if (prefered.empty()) return;
+
+    // first make sure same units cancel each other out
+    // it seems that a map table will fit nicely to do this
+    // we basically construct exponents for each unit
+    // has the advantage that they will be pre-sorted
+    map<string, int> exponents;
+
+    // initialize by summing up occurences in unit vectors
+    for (size_t i = 0, S = numerator_units_.size(); i < S; ++i) ++ exponents[numerator_units_[i]];
+    for (size_t i = 0, S = denominator_units_.size(); i < S; ++i) -- exponents[denominator_units_[i]];
+
+    // the final conversion factor
+    double factor = 1;
+
+    vector<string>::iterator denom_it = denominator_units_.begin();
+    vector<string>::iterator denom_end = denominator_units_.end();
+
+    // main normalization loop
+    // should be close to optimal
+    while (denom_it != denom_end)
+    {
+      // get and increment afterwards
+      const string denom = *(denom_it ++);
+      // check if conversion is needed
+      if (denom == prefered) continue;
+      // skip already canceled out unit
+      if (exponents[denom] >= 0) continue;
+      // skip all units we don't know how to convert
+      if (string_to_unit(denom) == INCOMMENSURABLE) continue;
+      // we now have two convertable units
+      // add factor for current conversion
+      factor *= conversion_factor(denom, prefered);
+      // update nominator/denominator exponent
+      ++ exponents[denom]; -- exponents[prefered];
+    }
+
+    vector<string>::iterator nom_it = numerator_units_.begin();
+    vector<string>::iterator nom_end = numerator_units_.end();
+
+    // now search for nominator
+    while (nom_it != nom_end)
+    {
+      // get and increment afterwards
+      const string nom = *(nom_it ++);
+      // check if conversion is needed
+      if (nom == prefered) continue;
+      // skip already canceled out unit
+      if (exponents[nom] <= 0) continue;
+      // skip all units we don't know how to convert
+      if (string_to_unit(nom) == INCOMMENSURABLE) continue;
+      // we now have two convertable units
+      // add factor for current conversion
+      factor *= conversion_factor(nom, prefered);
+      // update nominator/denominator exponent
+      -- exponents[nom]; ++ exponents[prefered];
+    }
+
+    // now we can build up the new unit arrays
+    numerator_units_.clear();
+    denominator_units_.clear();
+
+    // build them by iterating over the exponents
+    for (auto exp : exponents)
+    {
+      // maybe there is more effecient way to push
+      // the same item multiple times to a vector?
+      for(size_t i = 0, S = abs(exp.second); i < S; ++i)
+      {
+        // opted to have these switches in the inner loop
+        // makes it more readable and should not cost much
+        if (exp.second < 0) denominator_units_.push_back(exp.first);
+        else if (exp.second > 0) numerator_units_.push_back(exp.first);
+      }
+    }
+
+    // apply factor to value_
+    // best precision this way
+    value_ *= factor;
+
+  }
+
+  // useful for making one number compatible with another
+  string Number::find_convertible_unit() const
+  {
+    for (size_t i = 0, S = numerator_units_.size(); i < S; ++i) {
+      string u(numerator_units_[i]);
+      if (string_to_unit(u) != INCOMMENSURABLE) return u;
+    }
+    for (size_t i = 0, S = denominator_units_.size(); i < S; ++i) {
+      string u(denominator_units_[i]);
+      if (string_to_unit(u) != INCOMMENSURABLE) return u;
+    }
+    return string();
+  }
+
+
+  bool Number::operator== (Expression* rhs) const
+  {
+    try
+    {
+      Number l(pstate_, value_, unit());
+      Number& r = dynamic_cast<Number&>(*rhs);
+      l.normalize(find_convertible_unit());
+      r.normalize(find_convertible_unit());
+      return l.unit() == r.unit() &&
+             l.value() == r.value();
+    }
+    catch (std::bad_cast&) {}
+    catch (...) { throw; }
+    return false;
+  }
+
+  bool Number::operator== (Expression& rhs) const
+  {
+    return operator==(&rhs);
+  }
+
+  bool List::operator==(Expression* rhs) const
+  {
+    try
+    {
+      List* r = dynamic_cast<List*>(rhs);
+      if (!r || length() != r->length()) return false;
+      if (separator() != r->separator()) return false;
+      for (size_t i = 0, L = r->length(); i < L; ++i)
+        if (*elements()[i] != *(*r)[i]) return false;
+      return true;
+    }
+    catch (std::bad_cast&) {}
+    catch (...) { throw; }
+    return false;
+  }
+
+  bool List::operator== (Expression& rhs) const
+  {
+    return operator==(&rhs);
+  }
+
+  Expression* Hashed::at(Expression* k) const
+  {
+    if (elements_.count(k))
+    { return elements_.at(k); }
+    else { return &sass_null; }
   }
 
 }
