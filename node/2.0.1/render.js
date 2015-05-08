@@ -40,42 +40,30 @@ var cp = require("child_process"),
     rubyChildProcess;
 
 var ruby = {},
-    RE_RUBY_ERROR = {
-        // Error: [message]\n on line [line] of [path]
-        regexp: /Error: ([\s\S]*)on line ([0-9]+) of (.*)/i,
-        index: {
-            path: 3,
-            line: 2,
-            message: 1
-        }
-    },
-    RE_RUBY_WARNING = {
-        // WARNING: [message]\n from line [line] of [path]
-        regexp: /(WARNING: [\s\S]*)from line ([0-9]+) of (.*)/i,
-        index: {
-            path: 3,
-            line: 2,
-            message: 1
-        }
-    };
+    // Error: [message]\n on line [line] of [path]
+    RE_RUBY_ERROR = /Error: ([\s\S]*)on line ([0-9]+) of (.*)/i,
+    // WARNING: [message]\n from line [line] of [path]
+    RE_RUBY_WARNING = /(WARNING: [\s\S]*)from line ([0-9]+) of (.*)/i;
 
 function _success(result) {
     process.send(result);
 }
 
 function _error(error) {
-    process.send({ errorMessage: error.message || error });
+    process.send({ error: error });
+}
+
+function _log(message) {
+    process.send({ log: message });
 }
 
 ruby.parseError = function (file, errorString) {
-    var match = errorString.match(RE_RUBY_ERROR.regexp),
-        index = RE_RUBY_ERROR.index,
+    var match = errorString.match(RE_RUBY_ERROR),
         type = "error",
         details;
     
     if (!match) {
-        match = errorString.match(RE_RUBY_WARNING.regexp);
-        index = RE_RUBY_WARNING.index;
+        match = errorString.match(RE_RUBY_WARNING);
         type = "warning";
     }
 
@@ -91,9 +79,9 @@ ruby.parseError = function (file, errorString) {
         details = {
             type: type,
             errorString: errorString,
-            path: match[index.path],
-            pos: { line: parseInt(match[index.line], 10) - 1, ch: 0 },
-            message: match[index.message] && match[index.message].trim()
+            path: match[3],
+            pos: { line: parseInt(match[2], 10) - 1, ch: 0 },
+            message: match[1] && match[1].trim()
         };
     }
 
@@ -132,11 +120,9 @@ ruby.render = function (message) {
     
     var _finish = function () {
         if (error && error.type === "error") {
-            process.send({
-                error: error
-            });
+            _error(error);
         } else if (css && map) {
-            message.success({
+            _success({
                 css: css,
                 map: map,
                 error: error // !error || error.type === "warning"
@@ -157,10 +143,10 @@ ruby.render = function (message) {
     };
     
     // log details to brackets
-    process.send({
+    /*_log({
         message: message,
         command: command
-    });
+    });*/
 
     rubyChildProcess = cp.exec(command, options, function (execError, stdout, stderr) {
         if (stderr) {
@@ -180,28 +166,27 @@ ruby.render = function (message) {
 };
 
 process.on("message", function (message) {
-    message.success = function (result) {
-        _success(result);
-    };
-
     if (message._compiler === "ruby") {
         // Create output directory before running ruby compiler
         fs.mkdirp(path.dirname(message.outFile), function () {
             ruby.render(message);
         });
     } else { // "libsass"
-        message.error = function (sassError) {
-            var details = {};
-            
-            details.errorString = sassError.message;
-            details.path = sassError.file;
-            details.pos = { line: sassError.line - 1, ch: sassError.column };
-            details.message = sassError.message;
-            
-            process.send({ error: details });
-        };
-        
-        sass.render(message);
+        sass.render(message, function (error, result) {
+            if (error) {
+                _error({
+                    errorString: error.message,
+                    path: error.file,
+                    pos: { line: error.line - 1, ch: error.column },
+                    message: error.message
+                });
+            } else {
+                _success({
+                    css: result.css.toString(),
+                    map: result.map.toString()
+                });
+            }
+        });
     }
 });
 

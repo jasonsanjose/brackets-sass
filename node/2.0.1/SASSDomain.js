@@ -173,9 +173,8 @@ function _nextRender() {
     }
 
     messageListener = function (message) {
-        if (message.command) {
-            console.log(message.command);
-            console.log(message.message);
+        if (message.log) {
+            console.log(message.log);
         }
         
         if (message.css) {
