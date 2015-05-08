@@ -1,3 +1,9 @@
+# Upgrading node-sass
+
+* Update `/node/X.X.X/package.json` to update the `node-sass` dependency
+* Run `npm install`
+* Follow instructions below to update the version
+
 # Making changes to node.js modules and dependencies
 
 Due to how [Brackets loads node domains](https://github.com/adobe/brackets/issues/9744), we must manually version the node modules (see `/node/*` files in the repository root) whenever any files change in this sub-tree.
