@@ -23,7 +23,7 @@
 
 
 /*jslint vars: true, plusplus: true, devel: true, nomen: true, indent: 4, maxerr: 50, regexp: true */
-/*global define, $, _parseRuleList: true */
+/*global brackets, define, $, _parseRuleList: true */
 
 // JSLint Note: _parseRuleList() is cyclical dependency, not a global function.
 // It was added to this list to prevent JSLint warning about being used before being defined.
