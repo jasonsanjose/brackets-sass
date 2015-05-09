@@ -88,9 +88,8 @@ function checkAndFetchBinaries(sassBinaryName) {
 
 function fetch(sassBinaryName) {
   var url = [
-    'https://raw.githubusercontent.com/sass/node-sass-binaries/v',
-    packageInfo.version, '/', sassBinaryName,
-    '/binding.node'
+    'https://github.com/sass/node-sass/releases/download/v',
+    packageInfo.version, '/', sassBinaryName, '_binding.node'
   ].join('');
   var dir = path.join(__dirname, 'node_modules', 'node-sass', 'vendor', sassBinaryName);
   var dest = path.join(dir, 'binding.node');
@@ -125,4 +124,4 @@ if (process.env.SKIP_SASS_BINARY_DOWNLOAD_FOR_CI) {
  * Run
  */
 // Mac 32-bit not available. See README.md to build manually.
-["linux-ia32-node-0.10", "win32-ia32-node-0.10"].forEach(checkAndFetchBinaries);
+["linux-ia32-11", "win32-ia32-11"].forEach(checkAndFetchBinaries);
