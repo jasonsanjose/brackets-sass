@@ -40,16 +40,17 @@ neither pre-built https://github.com/sass/node-sass-binaries nor built
 during `npm install`. To build the 32-bit binary on Mac:
 
 ```
-cd /path/to/brackets-sass/node
+cd /path/to/brackets-sass/node/Y.Y.Y
 # install the latest version of node-sass
 npm install
 
 # build
 cd node_modules/node-sass
-node-gyp --arch=ia32 rebuild
+node scripts/build.js --arch=ia32 -f
 
 # copy to bin
-mkdir -p vendor/darwin-ia32-node-0.10
-cp build/Release/binding.node vendor/darwin-ia32-node-0.10
+mkdir -p vendor/darwin-ia32-11
+# node-sass scripts/build.js outputs to wrong directory name
+cp vendor/darwin-x64-11/binding.node vendor/darwin-ia32-11
 
 ```
