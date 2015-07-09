@@ -19,7 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
  * DEALINGS IN THE SOFTWARE.
  */
-/*jslint nomen:true, vars:true, regexp:true*/
+/*jslint nomen:true, vars:true, regexp:true, plusplus:true*/
 /*global window, console, define, brackets, $, PathUtils*/
 
 define(function (require, exports, module) {
@@ -38,8 +38,8 @@ define(function (require, exports, module) {
         ProjectManager      = brackets.getModule("project/ProjectManager");
     
     // Boilerplate to load NodeDomain
-    var _domainPath = ExtensionUtils.getModulePath(module, "node/3.0.0/SASSDomain"),
-        _nodeDomain = new NodeDomain("sass-v3.0.0", _domainPath);
+    var _domainPath = ExtensionUtils.getModulePath(module, "node/2.0.2/SASSDomain"),
+        _nodeDomain = new NodeDomain("sass-v2.0.2", _domainPath);
     
     // Initialize temp folder on windows only
     // This is to normalize windows paths instead of using Node's os.tmpdir()
@@ -63,46 +63,75 @@ define(function (require, exports, module) {
         scannedFileMap = {},
         partialErrorMap = {};
 
-    function _fixSourceMap(json, prefs) {
+    // Normalize a path (e.g. a/b/../c becomes a/c)
+    function _normalizePath(path) {
+        var up = 0,
+            i,
+            parts = path.split("/").filter(function (part, index) {
+                return !!part;
+            });
+
+        for (i = parts.length - 1; i >= 0; i--) {
+            var last = parts[i];
+            if (last === ".") {
+                parts.splice(i, 1);
+            } else if (last === "..") {
+                parts.splice(i, 1);
+                up++;
+            } else if (up) {
+                parts.splice(i, 1);
+                up--;
+            }
+        }
+        while (up--) {
+            parts.unshift("..");
+        }
+
+        return parts.join("/");
+    }
+
+    function _fixSourceMapPaths(json, css, prefs) {
         var inputFile = prefs.inputFile,
             cssFilePath = prefs.outputCSSFile.fullPath,
             sourceMapFilePath = prefs.outputSourceMapFile.fullPath;
-
-        // Output CSS file should be relative to the source map
-        if (typeof prefs.options.sourceMap === "string") {
-            json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
-        }
 
         // Replace backslashes in paths
         json.sources = json.sources.map(function (source) {
             return source.replace(/\\/g, "/");
         });
 
+        // Output CSS file should be relative to the source map
+        if (typeof prefs.options.sourceMap === "string") {
+            json.file = PathUtils.makePathRelative(cssFilePath, sourceMapFilePath);
+
+            if (prefs.compiler === "ruby") {
+                var sourcesPrefix = PathUtils.makePathRelative(PathUtils.directory(cssFilePath), PathUtils.directory(sourceMapFilePath)),
+                    mapPrefix = PathUtils.makePathRelative(PathUtils.directory(sourceMapFilePath), PathUtils.directory(cssFilePath));
+
+                json.sources = json.sources.map(function (source) {
+                    return _normalizePath(sourcesPrefix + source);
+                });
+
+                css = css.replace(/\/\*# sourceMappingURL=(.*?) \*\//, function (_, url) {
+                    return "/*# sourceMappingUrl=" + _normalizePath(mapPrefix + url) + " */";
+                });
+            }
+        }
+
         // For some reason, sources are output relative to the CWD
         // Add a sourceRoot to fix
         // json.sourceRoot = PathUtils.makePathRelative(inputFile.parentPath, sourceMapFilePath);
 
         // TODO read tab/space preference?
-        return JSON.stringify(json, null, "  ");
-    }
-
-    function _makeSourceMapRelativeToOutput(prefs) {
-        if (typeof prefs.options.sourceMap === "string") {
-            var sourceMapPath = prefs.outputSourceMapFile.fullPath,
-                cssFilePath = prefs.outputCSSFile.fullPath;
-
-            // sourceMap should be relative to the output file
-            // This is only used when generating sourceMappingURL
-            return PathUtils.makePathRelative(sourceMapPath, cssFilePath);
-        }
-        
-        return prefs.options.sourceMap;
+        return {
+            map: JSON.stringify(json, null, "  "),
+            css: css
+        };
     }
     
     function _render(path, prefs) {
         var deferred = new $.Deferred(),
-            options = prefs.options,
-            sourceMap = _makeSourceMapRelativeToOutput(prefs);
+            options = prefs.options;
         
         var renderPromise = _nodeDomain.exec("render",
             path,
@@ -111,12 +140,13 @@ define(function (require, exports, module) {
             options.imagePath,
             options.outputStyle,
             options.sourceComments,
-            sourceMap,
+            prefs.outputSourceMapFile.fullPath,
             prefs.compiler,
             prefs.compass);
 
         renderPromise.then(function (response) {
-            deferred.resolve(response.css, _fixSourceMap(response.map, prefs), response.error, response._compassOutFile);
+            var result = _fixSourceMapPaths(response.map, response.css, prefs);
+            deferred.resolve(result.css, result.map, response.error, response._compassOutFile);
         }, deferred.reject);
         
         return deferred.promise();
@@ -355,7 +385,6 @@ define(function (require, exports, module) {
         
         var cssFile = prefs.outputCSSFile,
             mapFile = prefs.outputSourceMapFile,
-            sourceMap = _makeSourceMapRelativeToOutput(prefs),
             options = prefs.options,
             previewPromise,
             inMemoryFiles = _getInMemoryFiles(docs),
@@ -371,24 +400,25 @@ define(function (require, exports, module) {
             options.imagePath,
             options.outputStyle,
             "map",
-            sourceMap,
+            prefs.outputSourceMapFile.fullPath,
             prefs.compiler,
             prefs.compass);
         
         StatusBarUtil.showBusyStatus("Checking for errors");
         
         previewPromise.then(function (response) {
-            var eventData = {
-                css: {
-                    file: cssFile,
-                    contents: response.css
-                },
-                sourceMap: {
-                    file: mapFile,
-                    contents: _fixSourceMap(response.map, prefs)
-                }
-            };
-            
+            var result = _fixSourceMapPaths(response.map, response.css, prefs),
+                eventData = {
+                    css: {
+                        file: cssFile,
+                        contents: result.css
+                    },
+                    sourceMap: {
+                        file: mapFile,
+                        contents: result.json
+                    }
+                };
+
             $(exports).triggerHandler("sourceMapPreviewEnd", [sassFile, eventData]);
             _finishScan(sassFile, response.error);
             
@@ -418,7 +448,7 @@ define(function (require, exports, module) {
     function killProcess() {
         _nodeDomain.exec("killProcess");
     }
-        
+     
     // Register preferences
     extensionPrefs.definePreference(PREF_ENABLED, "boolean", true)
         .on("change", _prefChangeHandler);
