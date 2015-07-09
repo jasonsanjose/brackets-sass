@@ -40,7 +40,7 @@ neither pre-built https://github.com/sass/node-sass-binaries nor built
 during `npm install`. To build the 32-bit binary on Mac:
 
 ```
-cd /path/to/brackets-sass/node
+cd /path/to/brackets-sass/node/Y.Y.Y
 # install the latest version of node-sass
 npm install
 
