@@ -46,7 +46,6 @@ npm install
 
 # build
 cd node_modules/node-sass
-# this should be...
 node scripts/build.js --arch=ia32 -f
 
 # copy to bin
