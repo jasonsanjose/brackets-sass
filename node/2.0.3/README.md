@@ -53,4 +53,7 @@ mkdir -p vendor/darwin-ia32-11
 # node-sass scripts/build.js outputs to wrong directory name
 cp vendor/darwin-x64-11/binding.node vendor/darwin-ia32-11
 
+# run install again to get latest binaries for other platforms
+npm install
+
 ```

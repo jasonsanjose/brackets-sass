@@ -34,7 +34,7 @@ var cp = require("child_process"),
     os = require("os"),
     path = require("path");
 
-var DOMAIN = "sass-v2.0.2",
+var DOMAIN = "sass-v2.0.3",
     RE_NODE_SASS_WIN_DRIVE = /([a-z]:\\([a-z]:\\))/i;
 
 var _domainManager,
